@@ -1,9 +1,11 @@
 // api/chat.js — função serverless Node.js (Vercel)
 // A chave da API NUNCA é exposta ao navegador: fica em process.env.ANTHROPIC_API_KEY
 //
-// Modelo: Claude Sonnet 4.6 (claude-sonnet-4-6)
+// Modelo: Claude Sonnet 4.5 (claude-sonnet-4-5)
 // Para trocar de modelo no futuro, edite apenas a string 'model' abaixo.
-// Modelos atuais da família (maio/2026): claude-sonnet-4-6, claude-opus-4-7, claude-opus-4-6, claude-haiku-4-5-20251001.
+// Modelos atuais (maio/2026): claude-sonnet-4-5, claude-sonnet-4-6, claude-opus-4-6, claude-opus-4-7.
+// Observação: para usar 'claude-sonnet-4-6' a chave da Anthropic precisa ter acesso ao modelo
+// (verifique em console.anthropic.com → Workspace → Settings → Permissions).
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -30,7 +32,7 @@ module.exports = async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-4-5',
         max_tokens: max_tokens || 1800,
         system,
         messages,
