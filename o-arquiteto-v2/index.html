@@ -1,231 +1,1206 @@
-// helpers/index.js — utilitários compartilhados por todas as funções serverless.
-// Conecta no Redis via REDIS_URL (variável criada automaticamente pela Vercel).
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O Arquiteto — Design Metodológico</title>
 
-const crypto = require('crypto');
-const { createClient } = require('redis');
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-// ============================================================
-//  REDIS — cliente reutilizado entre invocations quentes
-// ============================================================
+<style>
+:root {
+  --bg-page: #f7f5f0; --bg-card: #ffffff; --bg-card-alt: #faf8f3; --bg-muted: #efece4;
+  --border: #d8d4ca; --border-strong: #b8b1a3; --border-soft: #e8e4da;
+  --text: #1a1612; --text-strong: #0c0a08; --text-muted: #6b6358; --text-soft: #8b8275;
+  --accent: #6b2c2c; --accent-dark: #4a1f1f; --accent-soft: #f5ebeb; --accent-line: #c9a3a3;
+  --success: #2d5f3f; --error: #8b2c1f;
+  --shadow-sm: 0 1px 2px rgba(42,37,32,.04); --shadow-md: 0 2px 12px rgba(42,37,32,.08); --shadow-lg: 0 8px 32px rgba(42,37,32,.12);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{font-family:'Crimson Pro',Georgia,serif;font-size:1.0625rem;line-height:1.65;color:var(--text);background:var(--bg-page);min-height:100vh;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font-family:'Inter',system-ui,sans-serif;font-size:.9375rem;color:inherit}
+button{cursor:pointer;border:none;background:none}
+button:disabled{cursor:not-allowed;opacity:.5}
+.hidden{display:none!important}
 
-const REDIS_URL = process.env.REDIS_URL || process.env.KV_URL;
+.app-shell{max-width:900px;margin:0 auto;padding:0 1.5rem 4rem}
 
-let _client = null;
+/* Header */
+header.app-header{border-bottom:1px solid var(--border);padding:1.5rem 0 1.25rem;margin-bottom:2rem;display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand-title{font-family:'Crimson Pro',serif;font-size:1.875rem;font-weight:700;letter-spacing:-.015em;color:var(--text-strong)}
+.brand-subtitle{font-family:'Inter',sans-serif;font-size:.6875rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-muted);margin-top:.375rem;font-weight:500}
+.header-actions{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.user-info{font-family:'Inter',sans-serif;font-size:.8125rem;color:var(--text-muted);margin-right:.5rem}
+.user-info strong{color:var(--text);font-weight:600}
 
-async function getClient() {
-  if (_client && _client.isReady) return _client;
-  if (_client) {
-    try { await _client.disconnect(); } catch {}
-    _client = null;
+/* Botões */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.625rem 1.125rem;border-radius:4px;font-weight:500;font-size:.875rem;line-height:1.2;transition:all .15s ease;border:1px solid transparent;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--accent-dark)}
+.btn-secondary{background:transparent;color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover:not(:disabled){background:var(--bg-muted);border-color:var(--text-muted)}
+.btn-ghost{background:transparent;color:var(--text-muted);padding:.5rem .75rem}
+.btn-ghost:hover:not(:disabled){color:var(--accent);background:var(--accent-soft)}
+.btn-danger{background:transparent;color:var(--error);border-color:transparent;font-size:.8125rem;padding:.375rem .5rem}
+.btn-danger:hover:not(:disabled){background:#fbeae6}
+.btn-lg{padding:.875rem 1.5rem;font-size:1rem}
+.btn-block{width:100%}
+
+/* Stepper */
+.stepper{display:flex;gap:0;margin-bottom:2.5rem;border-bottom:1px solid var(--border)}
+.step{display:flex;align-items:center;gap:.625rem;padding:.75rem 0;margin-right:2rem;font-family:'Inter',sans-serif;font-size:.8125rem;color:var(--text-soft);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--bg-muted);color:var(--text-muted);font-size:.75rem;font-weight:600}
+.step.active{color:var(--accent);border-bottom-color:var(--accent)}
+.step.active .step-num{background:var(--accent);color:#fff}
+.step.done{color:var(--text)}
+.step.done .step-num{background:var(--success);color:#fff}
+
+/* Etapas */
+.etapa{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.etapa-title{font-family:'Crimson Pro',serif;font-size:1.625rem;font-weight:600;color:var(--text-strong);margin-bottom:.5rem;letter-spacing:-.01em}
+.etapa-lead{color:var(--text-muted);font-size:1.0625rem;margin-bottom:2rem;max-width:65ch}
+
+/* Form */
+.form{display:flex;flex-direction:column;gap:1.5rem}
+.campo{display:flex;flex-direction:column;gap:.375rem}
+.campo label{font-family:'Inter',sans-serif;font-size:.8125rem;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.05em}
+.req{color:var(--accent);margin-left:.125rem}
+.optional{font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-soft);font-style:italic}
+.campo input,.campo textarea,.campo select{padding:.75rem .875rem;border:1px solid var(--border-strong);border-radius:4px;background:var(--bg-card);font-family:'Crimson Pro',Georgia,serif;font-size:1.0625rem;line-height:1.5;color:var(--text);transition:border-color .15s,box-shadow .15s;resize:vertical;width:100%}
+.campo input:focus,.campo textarea:focus,.campo select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.campo select{cursor:pointer}
+.campo.with-icon{position:relative}
+.hint{font-family:'Inter',sans-serif;font-size:.8125rem;color:var(--text-soft);margin-top:.125rem}
+.campo input.pin{font-family:'Inter',sans-serif;letter-spacing:.5em;text-align:center;font-size:1.5rem;font-weight:600;padding:.75rem .5rem}
+.campo.invalid input,.campo.invalid select,.campo.invalid textarea{border-color:var(--error)}
+.campo .erro{color:var(--error);font-family:'Inter',sans-serif;font-size:.8125rem}
+
+/* Design cards */
+.designs-grid{display:flex;flex-direction:column;gap:1.25rem}
+.design-card{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:1.75rem;box-shadow:var(--shadow-sm);transition:border-color .15s,box-shadow .15s}
+.design-card:hover{border-color:var(--accent-line);box-shadow:var(--shadow-md)}
+.design-tag{display:inline-block;font-family:'Inter',sans-serif;font-size:.6875rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:.25rem .625rem;border-radius:3px;margin-bottom:.875rem}
+.design-nome{font-family:'Crimson Pro',serif;font-size:1.375rem;font-weight:600;color:var(--text-strong);margin-bottom:.75rem;letter-spacing:-.005em}
+.design-descricao{color:var(--text);margin-bottom:1.25rem;line-height:1.6}
+.design-specs{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem;padding:1rem 0;border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft);margin-bottom:1.25rem}
+.design-specs dt{font-family:'Inter',sans-serif;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+.design-specs dd{font-size:.9375rem;color:var(--text);line-height:1.5}
+.design-warning{padding:.75rem 1rem;background:var(--bg-card-alt);border-left:3px solid var(--accent-line);margin-bottom:.625rem;font-size:.9375rem;line-height:1.5}
+.design-warning strong{font-family:'Inter',sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);display:block;margin-bottom:.25rem}
+.design-actions{margin-top:1.25rem}
+
+/* Diálogo */
+.dialogo{display:flex;flex-direction:column;gap:1.25rem;margin-bottom:1.5rem}
+.msg{display:flex;flex-direction:column;gap:.375rem;max-width:100%}
+.msg-label{font-family:'Inter',sans-serif;font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--text-muted)}
+.msg-content{padding:1rem 1.125rem;border-radius:6px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word}
+.msg-arquiteto .msg-label{color:var(--accent)}
+.msg-arquiteto .msg-content{background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--accent)}
+.msg-aluno .msg-content{background:var(--bg-card-alt);border:1px solid var(--border-soft);color:var(--text)}
+
+.form-resposta{display:flex;gap:.625rem;align-items:flex-end}
+.form-resposta textarea{flex:1;padding:.75rem .875rem;border:1px solid var(--border-strong);border-radius:4px;background:var(--bg-card);font-family:'Crimson Pro',Georgia,serif;font-size:1rem;line-height:1.5;resize:vertical;min-height:60px}
+.form-resposta textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+.rodada-info{font-family:'Inter',sans-serif;font-size:.8125rem;color:var(--text-muted);margin-bottom:.875rem;display:flex;align-items:center;gap:.5rem}
+.rodada-pill{display:inline-block;padding:.125rem .5rem;background:var(--bg-muted);border-radius:10px;font-size:.75rem;font-weight:600;color:var(--text)}
+
+/* Protocolo */
+.protocolo{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:2rem 2.25rem;margin-bottom:1.5rem;font-size:1rem;line-height:1.7;white-space:pre-wrap;box-shadow:var(--shadow-sm)}
+.protocolo strong{color:var(--text-strong)}
+.acoes-protocolo{display:flex;gap:.625rem;margin-bottom:3rem;flex-wrap:wrap}
+
+.continuacao{padding-top:2.5rem;border-top:2px solid var(--border)}
+.continuacao h3{font-family:'Crimson Pro',serif;font-size:1.375rem;font-weight:600;margin-bottom:.375rem;color:var(--text-strong)}
+.continuacao>p{color:var(--text-muted);margin-bottom:1.5rem}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,22,18,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:1.5rem;animation:fadeIn .2s ease}
+.modal-card{background:var(--bg-card);border-radius:8px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);overflow:hidden}
+.modal-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h2{font-family:'Crimson Pro',serif;font-size:1.25rem;font-weight:600;color:var(--text-strong)}
+.modal-body{overflow-y:auto;padding:1.5rem}
+.modal-body.no-padding{padding:.5rem}
+.modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:.625rem;justify-content:flex-end}
+.btn-close{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.25rem;color:var(--text-muted);transition:background .15s}
+.btn-close:hover{background:var(--bg-muted);color:var(--text)}
+
+/* Sessões */
+.sessoes-empty{padding:3rem 1.5rem;text-align:center;color:var(--text-soft);font-style:italic}
+.sessao-item{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.875rem 1rem;border-radius:4px;margin:.125rem 0;transition:background .15s}
+.sessao-item:hover{background:var(--bg-card-alt)}
+.sessao-info{flex:1;min-width:0;cursor:pointer}
+.sessao-titulo{font-weight:600;color:var(--text-strong);margin-bottom:.125rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:1rem}
+.sessao-meta{font-family:'Inter',sans-serif;font-size:.75rem;color:var(--text-muted);display:flex;gap:.75rem;align-items:center}
+.sessao-status{display:inline-block;padding:.125rem .5rem;border-radius:10px;background:var(--bg-muted);font-weight:600;font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em}
+.sessao-status.completo{background:#e0eee5;color:var(--success)}
+.sessao-actions{display:flex;gap:.25rem}
+.sessao-item.atual{background:var(--accent-soft);border-left:3px solid var(--accent);padding-left:calc(1rem - 3px)}
+
+/* Loading & Toast */
+.loading{position:fixed;inset:0;background:rgba(247,245,240,.85);backdrop-filter:blur(2px);z-index:200;display:flex;align-items:center;justify-content:center}
+.loading-content{background:var(--bg-card);padding:2rem 3rem;border-radius:6px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;align-items:center;gap:1.25rem;max-width:320px;text-align:center}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading p{font-family:'Inter',sans-serif;font-size:.875rem;color:var(--text-muted)}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text-strong);color:#fff;padding:.75rem 1.25rem;border-radius:4px;font-family:'Inter',sans-serif;font-size:.875rem;z-index:300;box-shadow:var(--shadow-md);animation:slideUp .3s ease;max-width:90vw}
+.toast.error{background:var(--error)}
+.toast.success{background:var(--success)}
+@keyframes slideUp{from{opacity:0;transform:translate(-50%,1rem)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* Auth screen */
+.auth-shell{max-width:480px;margin:3rem auto;padding:0 1.5rem 4rem}
+.auth-brand{text-align:center;margin-bottom:2.5rem}
+.auth-brand h1{font-family:'Crimson Pro',serif;font-size:2.25rem;font-weight:700;color:var(--text-strong);letter-spacing:-.02em}
+.auth-brand p{color:var(--text-muted);margin-top:.25rem;font-family:'Inter',sans-serif;font-size:.8125rem;text-transform:uppercase;letter-spacing:.12em;font-weight:500}
+.auth-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:2rem;box-shadow:var(--shadow-sm)}
+.auth-tabs{display:flex;gap:0;margin-bottom:1.75rem;border-bottom:1px solid var(--border)}
+.auth-tab{padding:.75rem 1.25rem;font-family:'Inter',sans-serif;font-size:.875rem;font-weight:600;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;background:none;border-top:none;border-left:none;border-right:none}
+.auth-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+.lgpd-box{background:var(--bg-card-alt);border:1px solid var(--border);border-radius:6px;padding:1rem 1.125rem;font-size:.875rem;line-height:1.55;margin-bottom:.25rem;max-height:200px;overflow-y:auto}
+.lgpd-box h4{font-family:'Inter',sans-serif;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:.5rem;font-weight:700}
+.lgpd-box p{margin-bottom:.5rem}
+.lgpd-box p:last-child{margin-bottom:0}
+.checkbox-row{display:flex;gap:.625rem;align-items:flex-start;font-family:'Inter',sans-serif;font-size:.875rem;color:var(--text);cursor:pointer;line-height:1.4}
+.checkbox-row input{margin-top:.2rem;flex-shrink:0;cursor:pointer}
+
+.error-box{background:#fbeae6;border:1px solid #f0b8a8;border-left:3px solid var(--error);color:var(--error);padding:.75rem 1rem;border-radius:4px;font-size:.875rem;margin-bottom:1rem;font-family:'Inter',sans-serif}
+
+@media (max-width:640px){
+  .app-shell{padding:0 1rem 3rem}
+  .auth-shell{margin:1.5rem auto}
+  .auth-card{padding:1.5rem 1.25rem}
+  .brand-title{font-size:1.5rem}
+  .etapa-title{font-size:1.375rem}
+  .design-card{padding:1.25rem}
+  .protocolo{padding:1.5rem 1.25rem}
+  .step{margin-right:1.25rem;font-size:.75rem}
+  .step-label{display:none}
+  .form-resposta{flex-direction:column;align-items:stretch}
+  .stepper{overflow-x:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ TELA DE AUTENTICAÇÃO ============ -->
+<div id="telaAuth" class="auth-shell hidden">
+  <div class="auth-brand">
+    <h1>O Arquiteto</h1>
+    <p>Design metodológico · FADISP</p>
+  </div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Entrar</button>
+      <button class="auth-tab" data-tab="cadastro">Criar conta</button>
+    </div>
+
+    <!-- Form login -->
+    <form id="formLogin" class="form">
+      <div class="campo">
+        <label for="loginCpf">CPF</label>
+        <input id="loginCpf" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required>
+      </div>
+      <div class="campo">
+        <label for="loginPin">Senha (4 dígitos)</label>
+        <input id="loginPin" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" class="pin" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg btn-block">Entrar</button>
+    </form>
+
+    <!-- Form cadastro -->
+    <form id="formCadastro" class="form hidden">
+      <div class="campo">
+        <label for="cadCpf">CPF <span class="req">*</span></label>
+        <input id="cadCpf" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required>
+      </div>
+      <div class="campo">
+        <label for="cadNome">Nome completo <span class="req">*</span></label>
+        <input id="cadNome" type="text" required>
+      </div>
+      <div class="campo">
+        <label for="cadEmail">Email <span class="req">*</span></label>
+        <input id="cadEmail" type="email" required>
+      </div>
+      <div class="campo">
+        <label for="cadPin">Crie uma senha de 4 dígitos <span class="req">*</span></label>
+        <input id="cadPin" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" class="pin" required>
+        <p class="hint">Use uma combinação não óbvia (evite 1234, 0000, datas, etc.).</p>
+      </div>
+      <div class="campo">
+        <label for="cadPin2">Confirme a senha <span class="req">*</span></label>
+        <input id="cadPin2" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" class="pin" required>
+      </div>
+
+      <div class="campo">
+        <label>Termo de consentimento (LGPD) <span class="req">*</span></label>
+        <div class="lgpd-box">
+          <h4>Dados que serão coletados</h4>
+          <p><strong>CPF, nome, email</strong> (para identificação) e o <strong>conteúdo das sessões</strong> (pergunta de pesquisa, objetivos, hipóteses, diálogos com o Arquiteto, protocolos gerados).</p>
+          <h4>Finalidade</h4>
+          <p>Acompanhamento pedagógico pela professora responsável pela disciplina e permitir que você retome sessões anteriores em qualquer dispositivo.</p>
+          <h4>Armazenamento e prazo</h4>
+          <p>Os dados ficam em banco protegido na Vercel. O CPF é armazenado de forma criptografada e a senha em hash. <strong>Os dados são apagados automaticamente após 6 meses sem acesso seu</strong>, e você pode excluir tudo a qualquer momento dentro do app ("Minha conta" → "Excluir meus dados").</p>
+          <h4>Compartilhamento</h4>
+          <p>Apenas a professora da disciplina tem acesso ao conteúdo das suas sessões através de um painel restrito por senha.</p>
+        </div>
+        <label class="checkbox-row" style="margin-top:.75rem">
+          <input type="checkbox" id="cadConsent" required>
+          <span>Li e concordo com o tratamento dos meus dados pessoais conforme descrito acima.</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-block">Criar conta e entrar</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ APP PRINCIPAL ============ -->
+<div id="telaApp" class="hidden">
+<div class="app-shell">
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-title">O Arquiteto</span>
+      <span class="brand-subtitle">Design metodológico · Seminário de Pesquisa · FADISP</span>
+    </div>
+    <div class="header-actions">
+      <span class="user-info" id="userInfo"></span>
+      <button class="btn btn-secondary" id="btnSessoes">Minhas sessões</button>
+      <button class="btn btn-primary" id="btnNovaSessao">Nova sessão</button>
+      <button class="btn btn-ghost" id="btnConta" title="Minha conta">⚙</button>
+    </div>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <div class="step" data-step="1"><span class="step-num">1</span><span class="step-label">Projeto</span></div>
+    <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">Designs</span></div>
+    <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">Refinamento</span></div>
+    <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Protocolo</span></div>
+  </nav>
+
+  <main>
+    <!-- Etapa 1 -->
+    <section class="etapa hidden" id="etapa1">
+      <h2 class="etapa-title">Meu Projeto</h2>
+      <p class="etapa-lead">Descreva sua pesquisa para que o Arquiteto possa propor designs metodológicos adequados. Lembre-se: o método deve servir à pergunta, não às conveniências.</p>
+      <form id="formProjeto" class="form" autocomplete="off">
+        <div class="campo">
+          <label for="pergunta">Pergunta de pesquisa <span class="req">*</span></label>
+          <textarea id="pergunta" rows="3" required></textarea>
+          <p class="hint">A pergunta central da sua tese, formulada com precisão.</p>
+        </div>
+        <div class="campo">
+          <label for="objetivo">Objetivo geral <span class="req">*</span></label>
+          <textarea id="objetivo" rows="3" required></textarea>
+        </div>
+        <div class="campo">
+          <label for="tipo">Tipo de pesquisa <span class="req">*</span></label>
+          <select id="tipo" required>
+            <option value="">Selecione...</option>
+            <option>Exploratória</option>
+            <option>Descritiva</option>
+            <option>Explicativa</option>
+            <option>Prescritiva lege ferenda</option>
+            <option>Prescritiva lege lata</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="hipotese">Hipótese provisória <span class="optional">(opcional)</span></label>
+          <textarea id="hipotese" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg">Gerar designs metodológicos →</button>
+      </form>
+    </section>
+
+    <!-- Etapa 2 -->
+    <section class="etapa hidden" id="etapa2">
+      <h2 class="etapa-title">Designs Possíveis</h2>
+      <p class="etapa-lead">Três designs distintos para sua pesquisa. <strong>Escolha o mais adequado à pergunta — não o mais fácil.</strong></p>
+      <div id="designsGrid" class="designs-grid"></div>
+      <div style="margin-top:1.5rem"><button class="btn btn-ghost" id="btnVoltarEtapa1">← Revisar projeto</button></div>
+    </section>
+
+    <!-- Etapa 3 -->
+    <section class="etapa hidden" id="etapa3">
+      <h2 class="etapa-title">Refinamento</h2>
+      <p class="etapa-lead">Diálogo socrático para operacionalizar o design escolhido. Até três rodadas. Suas respostas devem ser concretas.</p>
+      <div class="rodada-info">
+        <span class="rodada-pill" id="rodadaPill">Rodada 1 de 3</span>
+        <span id="designAtualNome"></span>
+      </div>
+      <div class="dialogo" id="dialogoRefinamento"></div>
+      <form id="formResposta" class="form-resposta">
+        <textarea id="respostaInput" rows="3" placeholder="Sua resposta..." required></textarea>
+        <button type="submit" class="btn btn-primary">Enviar →</button>
+      </form>
+    </section>
+
+    <!-- Etapa 4 -->
+    <section class="etapa hidden" id="etapa4">
+      <h2 class="etapa-title">Protocolo Metodológico Provisório</h2>
+      <p class="etapa-lead">Pronto para copiar como <strong>Item 08</strong> do seu documento acumulativo.</p>
+      <div class="protocolo" id="protocoloTexto"></div>
+      <div class="acoes-protocolo">
+        <button class="btn btn-primary" id="btnCopiar">Copiar texto</button>
+        <button class="btn btn-secondary" id="btnPdf">Exportar PDF da sessão</button>
+        <button class="btn btn-ghost" id="btnRegerar">Regerar protocolo</button>
+      </div>
+
+      <div class="continuacao">
+        <h3>Continuar o diálogo</h3>
+        <p>Tem dúvidas sobre o protocolo? Quer refinar critérios, validar uma escolha? O Arquiteto carrega todo o contexto da sessão.</p>
+        <div class="dialogo" id="dialogoContinuacao"></div>
+        <form id="formContinuacao" class="form-resposta">
+          <textarea id="continuacaoInput" rows="2" placeholder="Sua pergunta ou pedido de ajuste..." required></textarea>
+          <button type="submit" class="btn btn-primary">Enviar →</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+</div>
+
+<!-- Modal sessões -->
+<div class="modal-overlay hidden" id="modalSessoes">
+  <div class="modal-card">
+    <div class="modal-header"><h2>Suas sessões</h2><button class="btn-close" data-close-modal="modalSessoes">×</button></div>
+    <div class="modal-body no-padding" id="sessoesList"></div>
+  </div>
+</div>
+
+<!-- Modal conta -->
+<div class="modal-overlay hidden" id="modalConta">
+  <div class="modal-card">
+    <div class="modal-header"><h2>Minha conta</h2><button class="btn-close" data-close-modal="modalConta">×</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:1.5rem">
+        <p style="margin-bottom:.5rem"><strong id="contaNome"></strong></p>
+        <p style="font-family:'Inter',sans-serif;font-size:.875rem;color:var(--text-muted)" id="contaEmail"></p>
+        <p style="font-family:'Inter',sans-serif;font-size:.8125rem;color:var(--text-soft);margin-top:.5rem" id="contaDesde"></p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.625rem">
+        <button class="btn btn-secondary" id="btnLogout">Sair (manter dados)</button>
+        <button class="btn btn-danger" id="btnExcluirConta" style="border:1px solid var(--error);padding:.625rem 1.125rem;font-size:.875rem">Excluir minha conta e todos os meus dados</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="loading hidden" id="loading"><div class="loading-content"><div class="spinner"></div><p id="loadingMsg">Carregando...</p></div></div>
+<div class="toast hidden" id="toast"></div>
+
+<script>
+'use strict';
+
+const API = {
+  cadastrar: '/api/cadastrar',
+  login: '/api/login',
+  me: '/api/me',
+  sessoes: '/api/sessoes',
+  excluirConta: '/api/excluir-conta',
+  chat: '/api/chat'
+};
+
+const TOKEN_KEY = 'arquiteto_token_v1';
+const ACTIVE_KEY = 'arquiteto_sessao_ativa_v1';
+const MAX_RODADAS = 3;
+
+let token = null;
+let aluno = null;
+let state = createBlankState();
+
+function createBlankState() {
+  return {
+    id: null, title: '', createdAt: null, updatedAt: null,
+    etapaAtual: 1,
+    projeto: { pergunta: '', objetivo: '', tipo: '', hipotese: '' },
+    designs: [], designEscolhido: null,
+    refinamento: { messages: [], rodada: 0, concluido: false, sintese: '' },
+    protocoloFinal: '',
+    continuacao: []
+  };
+}
+
+// ========== FETCH HELPER ==========
+async function api(url, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (opts.body && typeof opts.body !== 'string') {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
   }
-  if (!REDIS_URL) throw new Error('REDIS_URL não configurada no servidor.');
-  _client = createClient({
-    url: REDIS_URL,
-    socket: { connectTimeout: 10000, reconnectStrategy: false }
-  });
-  _client.on('error', () => { /* evita crash por erro não tratado */ });
-  await _client.connect();
-  return _client;
+  const res = await fetch(url, opts);
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    if (res.status === 401) {
+      logout(true);
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+    throw new Error((data && data.error) || `Erro ${res.status}`);
+  }
+  return data;
 }
 
-async function kvGet(key) {
-  const c = await getClient();
-  const raw = await c.get(key);
-  if (raw === null || raw === undefined) return null;
-  try { return JSON.parse(raw); } catch { return null; }
-}
-
-async function kvSet(key, value, ttlSeconds) {
-  const c = await getClient();
-  const v = JSON.stringify(value);
-  if (ttlSeconds) await c.set(key, v, { EX: ttlSeconds });
-  else await c.set(key, v);
-  return 'OK';
-}
-
-async function kvDel(key) {
-  const c = await getClient();
-  return c.del(key);
-}
-
-async function kvExpire(key, seconds) {
-  const c = await getClient();
-  return c.expire(key, seconds);
-}
-
-async function kvSAdd(set, value) {
-  const c = await getClient();
-  return c.sAdd(set, value);
-}
-
-async function kvSRem(set, value) {
-  const c = await getClient();
-  return c.sRem(set, value);
-}
-
-async function kvSMembers(set) {
-  const c = await getClient();
-  const r = await c.sMembers(set);
-  return Array.isArray(r) ? r : [];
-}
-
-// ============================================================
-//  Criptografia
-// ============================================================
-
-const ENC_KEY_HEX = process.env.ENCRYPTION_KEY;
-
-function getEncKey() {
-  if (!ENC_KEY_HEX) throw new Error('ENCRYPTION_KEY não configurada.');
-  const buf = Buffer.from(ENC_KEY_HEX, 'hex');
-  if (buf.length !== 32) throw new Error('ENCRYPTION_KEY deve ter 64 caracteres hex (32 bytes).');
-  return buf;
-}
-
-function sha256(input) {
-  return crypto.createHash('sha256').update(input).digest('hex');
-}
-
-function hashCPF(cpf) {
-  const clean = String(cpf).replace(/\D/g, '');
-  return sha256('arquiteto-cpf-v1:' + clean);
-}
-
-function encryptCPF(cpf) {
-  const clean = String(cpf).replace(/\D/g, '');
-  const key = getEncKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const enc = Buffer.concat([cipher.update(clean, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, enc]).toString('base64');
-}
-
-function decryptCPF(encoded) {
-  const key = getEncKey();
-  const buf = Buffer.from(encoded, 'base64');
-  const iv = buf.slice(0, 12);
-  const tag = buf.slice(12, 28);
-  const enc = buf.slice(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  return decipher.update(enc, null, 'utf8') + decipher.final('utf8');
-}
-
-function hashPassword(password, salt) {
-  if (!salt) salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(String(password), salt, 100000, 64, 'sha256').toString('hex');
-  return { salt, hash };
-}
-
-function verifyPassword(password, salt, expectedHash) {
-  const { hash } = hashPassword(password, salt);
+// ========== AUTH ==========
+async function tryAutoLogin() {
+  const saved = localStorage.getItem(TOKEN_KEY);
+  if (!saved) return false;
+  token = saved;
   try {
-    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(expectedHash, 'hex'));
+    const data = await api(API.me);
+    aluno = data.aluno;
+    return true;
   } catch {
+    token = null;
+    localStorage.removeItem(TOKEN_KEY);
     return false;
   }
 }
 
-function timingSafeEqualString(a, b) {
-  const ba = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
+async function fazerLogin(cpf, pin) {
+  const data = await api(API.login, { method: 'POST', body: { cpf, pin } });
+  token = data.token;
+  aluno = data.aluno;
+  localStorage.setItem(TOKEN_KEY, token);
 }
 
-function randomToken() {
-  return crypto.randomBytes(32).toString('hex');
+async function fazerCadastro(payload) {
+  const data = await api(API.cadastrar, { method: 'POST', body: payload });
+  token = data.token;
+  aluno = data.aluno;
+  localStorage.setItem(TOKEN_KEY, token);
 }
 
-// ============================================================
-//  Validações
-// ============================================================
-
-function formatCPF(cpf) {
-  const c = String(cpf).replace(/\D/g, '');
-  if (c.length !== 11) return cpf;
-  return `${c.slice(0,3)}.${c.slice(3,6)}.${c.slice(6,9)}-${c.slice(9,11)}`;
+async function logout(silent) {
+  try { await api(API.me, { method: 'DELETE' }); } catch {}
+  token = null;
+  aluno = null;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ACTIVE_KEY);
+  state = createBlankState();
+  mostrarTelaAuth();
+  if (!silent) toast('Sessão encerrada.');
 }
 
-function validateCPF(cpf) {
-  const c = String(cpf).replace(/\D/g, '');
-  if (c.length !== 11) return false;
-  if (/^(\d)\1+$/.test(c)) return false;
-
-  let sum = 0;
-  for (let i = 0; i < 9; i++) sum += parseInt(c[i], 10) * (10 - i);
-  let d1 = 11 - (sum % 11);
-  if (d1 >= 10) d1 = 0;
-  if (d1 !== parseInt(c[9], 10)) return false;
-
-  sum = 0;
-  for (let i = 0; i < 10; i++) sum += parseInt(c[i], 10) * (11 - i);
-  let d2 = 11 - (sum % 11);
-  if (d2 >= 10) d2 = 0;
-  if (d2 !== parseInt(c[10], 10)) return false;
-
-  return true;
+async function excluirConta() {
+  if (!confirm('Tem certeza? Todos os seus dados (sessões, protocolos, diálogos) serão apagados permanentemente. Esta ação não pode ser desfeita.')) return;
+  if (!confirm('Confirmação final: excluir todos os dados?')) return;
+  setLoading(true, 'Excluindo seus dados...');
+  try {
+    await api(API.excluirConta, { method: 'POST' });
+    token = null; aluno = null;
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ACTIVE_KEY);
+    state = createBlankState();
+    setLoading(false);
+    closeAllModals();
+    mostrarTelaAuth();
+    toast('Conta e dados excluídos.', 'success');
+  } catch (err) {
+    setLoading(false);
+    toast(err.message, 'error');
+  }
 }
 
-function validateEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email).trim());
+// ========== SESSÕES (servidor) ==========
+async function listarSessoes() {
+  const data = await api(API.sessoes);
+  return data.sessoes || [];
+}
+async function obterSessao(id) {
+  const data = await api(API.sessoes + '?id=' + encodeURIComponent(id));
+  return data.sessao;
+}
+async function salvarSessao() {
+  if (!state.id) return;
+  state.updatedAt = Date.now();
+  if (!state.title) state.title = (state.projeto.pergunta || 'Sessão sem título').slice(0, 90);
+  try {
+    await api(API.sessoes, { method: 'POST', body: state });
+    localStorage.setItem(ACTIVE_KEY, state.id);
+  } catch (err) {
+    toast('Falha ao salvar: ' + err.message, 'error');
+  }
+}
+async function excluirSessao(id) {
+  await api(API.sessoes + '?id=' + encodeURIComponent(id), { method: 'DELETE' });
 }
 
-const PINS_OBVIOS = new Set([
-  '0000','1111','2222','3333','4444','5555','6666','7777','8888','9999',
-  '1234','2345','3456','4567','5678','6789','0123',
-  '4321','5432','6543','7654','8765','9876','3210',
-  '1212','2121','1010','0101','2020','1313','6969'
-]);
-
-function validatePIN(pin) {
-  const p = String(pin || '');
-  if (!/^\d{4}$/.test(p)) return { ok: false, reason: 'A senha deve ter exatamente 4 dígitos.' };
-  if (PINS_OBVIOS.has(p)) return { ok: false, reason: 'Senha óbvia demais. Escolha outra combinação.' };
-  return { ok: true };
+// ========== NAVEGAÇÃO DE TELAS ==========
+function mostrarTelaAuth() {
+  document.getElementById('telaAuth').classList.remove('hidden');
+  document.getElementById('telaApp').classList.add('hidden');
+}
+function mostrarTelaApp() {
+  document.getElementById('telaAuth').classList.add('hidden');
+  document.getElementById('telaApp').classList.remove('hidden');
+  document.getElementById('userInfo').innerHTML = `Olá, <strong>${escapeHTML(aluno.nome.split(' ')[0])}</strong>`;
 }
 
-// ============================================================
-//  Autenticação por token (Bearer)
-// ============================================================
-
-const TOKEN_TTL_ALUNO = 7 * 24 * 60 * 60;
-const TOKEN_TTL_PAINEL = 12 * 60 * 60;
-
-async function authenticateRequest(req) {
-  const auth = req.headers && req.headers.authorization ? req.headers.authorization : '';
-  if (!auth.startsWith('Bearer ')) return null;
-  const token = auth.slice(7);
-  const cpfHash = await kvGet('token:' + token);
-  if (!cpfHash) return null;
-  const aluno = await kvGet('aluno:' + cpfHash);
-  if (!aluno) return null;
-  await kvExpire('token:' + token, TOKEN_TTL_ALUNO);
-  aluno.ultimoAcesso = Date.now();
-  await kvSet('aluno:' + cpfHash, aluno);
-  return { cpfHash, aluno, token };
+async function novaSessao() {
+  state = createBlankState();
+  state.id = (crypto.randomUUID ? crypto.randomUUID() : 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9));
+  state.createdAt = Date.now();
+  state.etapaAtual = 1;
+  irParaEtapa(1);
+  resetForms();
+  closeAllModals();
+}
+function resetForms() {
+  document.getElementById('formProjeto').reset();
+  document.getElementById('respostaInput').value = '';
+  document.getElementById('continuacaoInput').value = '';
 }
 
-async function authenticatePainel(req) {
-  const auth = req.headers && req.headers.authorization ? req.headers.authorization : '';
-  if (!auth.startsWith('Bearer ')) return null;
-  const token = auth.slice(7);
-  const v = await kvGet('painel_token:' + token);
-  if (!v) return null;
-  await kvExpire('painel_token:' + token, TOKEN_TTL_PAINEL);
-  return { token };
+// ========== CHAT API ==========
+async function callIA(system, messages, maxTokens) {
+  const res = await api(API.chat, {
+    method: 'POST',
+    body: { system, messages, max_tokens: maxTokens || 1800 }
+  });
+  return res.content?.[0]?.text || '';
 }
 
-// ============================================================
-//  Exports
-// ============================================================
+function parseDesignsJSON(rawText) {
+  let clean = rawText.trim();
+  clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  const start = clean.indexOf('[');
+  const end = clean.lastIndexOf(']');
+  if (start !== -1 && end !== -1) clean = clean.substring(start, end + 1);
+  return JSON.parse(clean);
+}
 
-module.exports = {
-  kvGet, kvSet, kvDel, kvExpire, kvSAdd, kvSRem, kvSMembers,
-  sha256, hashCPF, encryptCPF, decryptCPF,
-  hashPassword, verifyPassword, timingSafeEqualString, randomToken,
-  formatCPF, validateCPF, validateEmail, validatePIN,
-  authenticateRequest, authenticatePainel,
-  TOKEN_TTL_ALUNO, TOKEN_TTL_PAINEL
-};
+// ========== SYSTEM PROMPTS ==========
+function promptGeracaoDesigns() {
+  return `Você é O Arquiteto — um consultor especializado em design metodológico para pesquisa jurídica em doutorado. Você é rigoroso, preciso e jamais genérico.
+
+Princípio fundamental: o método deve emergir da pergunta de pesquisa e dos objetivos — nunca das conveniências institucionais ou profissionais do pesquisador. Se o método mais adequado for difícil de executar, diga isso claramente. O papel do pesquisador é encontrar um modo de fazê-lo — ou rever o escopo da pesquisa. Facilidade não é critério metodológico.
+
+Sua tarefa é propor exatamente 3 designs metodológicos distintos e adequados para a pesquisa descrita. Eles devem ser genuinamente diferentes — não variações do mesmo método.
+
+Para cada design, produza um JSON com este formato exato:
+{
+  "tag": "nome curto em maiúsculas (ex: DOGMÁTICO-ANALÍTICO)",
+  "nome": "nome completo do design metodológico",
+  "descricao": "2-3 frases explicando por que este design é adequado à pergunta e aos objetivos — com ancoragem direta na pergunta formulada",
+  "abordagem": "abordagem de pesquisa (qualitativa / quantitativa / misto)",
+  "tecnica": "técnica(s) de coleta de dados específica(s)",
+  "fontes": "tipos de fontes que serão utilizadas",
+  "analise": "como os dados/fontes serão analisados",
+  "exigencias": "o que este design exige do pesquisador: competências, tempo, acesso a fontes, recursos",
+  "desafio": "o principal obstáculo metodológico que o pesquisador precisará superar para executar este design com rigor científico"
+}
+
+Responda APENAS com um array JSON com exatamente 3 objetos. Nada mais. Sem markdown, sem backticks, sem explicações fora do JSON.`;
+}
+
+function promptRefinamento(s) {
+  const d = s.designEscolhido;
+  return `Você é O Arquiteto — um consultor exigente de design metodológico jurídico. O pesquisador escolheu um design e agora você vai refiná-lo através de um diálogo.
+
+Princípio fundamental: o método serve à pergunta — não ao pesquisador. Se uma escolha metodológica for difícil mas necessária, diga isso. Facilidade não é critério.
+
+Seu protocolo:
+1. Faça UMA pergunta de refinamento por rodada — nunca mais de uma.
+2. As perguntas devem ser operacionais e exigentes.
+3. Após ${MAX_RODADAS} rodadas, encerre com "REFINAMENTO_CONCLUÍDO" seguido de um parágrafo de síntese.
+4. Se uma resposta for vaga, diga o que falta antes de continuar.
+5. Tom: consultor técnico experiente, direto, sem elogios desnecessários.
+
+Contexto da pesquisa:
+- Pergunta: ${s.projeto.pergunta}
+- Objetivo geral: ${s.projeto.objetivo}
+- Tipo de pesquisa: ${s.projeto.tipo}
+- Hipótese: ${s.projeto.hipotese || 'não informada'}
+
+Design escolhido: ${d.nome} (${d.tag})
+- Abordagem: ${d.abordagem}
+- Técnica: ${d.tecnica}
+- Fontes: ${d.fontes}
+- Análise: ${d.analise}
+- Desafio central: ${d.desafio}
+
+Comece fazendo a primeira pergunta operacional.`;
+}
+
+function promptProtocolo() {
+  return `Você é O Arquiteto. Sintetize o design metodológico definido durante o refinamento em um PROTOCOLO METODOLÓGICO PROVISÓRIO, estruturado, formal e copiável para um documento acadêmico.
+
+Estrutura obrigatória, com rótulos em maiúsculas:
+ABORDAGEM METODOLÓGICA:
+TÉCNICA(S) DE COLETA:
+FONTES DA PESQUISA:
+MÉTODO DE ANÁLISE:
+RECORTE TEMPORAL E ESPACIAL:
+LIMITAÇÕES RECONHECIDAS:
+PRÓXIMOS PASSOS OPERACIONAIS:
+
+Linguagem acadêmica direta. Máximo 400 palavras. Sem introdução ou conclusão.`;
+}
+
+function promptContinuacao(s) {
+  const d = s.designEscolhido;
+  return `Você é O Arquiteto. O pesquisador já tem um protocolo metodológico provisório e quer continuar o diálogo.
+
+Princípio: o método serve à pergunta. Tom: técnico, direto, sem elogios.
+
+PROJETO
+- Pergunta: ${s.projeto.pergunta}
+- Objetivo: ${s.projeto.objetivo}
+- Tipo: ${s.projeto.tipo}
+- Hipótese: ${s.projeto.hipotese || 'não informada'}
+
+DESIGN: ${d.nome} (${d.tag})
+- Abordagem: ${d.abordagem} | Técnica: ${d.tecnica}
+- Fontes: ${d.fontes} | Análise: ${d.analise}
+- Desafio: ${d.desafio}
+
+SÍNTESE DO REFINAMENTO
+${s.refinamento.sintese || '(sem síntese explícita)'}
+
+PROTOCOLO GERADO
+${s.protocoloFinal}`;
+}
+
+// ========== FLUXOS DE IA ==========
+async function gerarDesigns() {
+  setLoading(true, 'Analisando o projeto e propondo 3 designs...');
+  try {
+    const userMsg = `Projeto de pesquisa:
+- Pergunta: ${state.projeto.pergunta}
+- Objetivo geral: ${state.projeto.objetivo}
+- Tipo: ${state.projeto.tipo}
+- Hipótese: ${state.projeto.hipotese || 'não informada'}
+
+Proponha 3 designs metodológicos distintos e rigorosamente fundamentados.`;
+    const raw = await callIA(promptGeracaoDesigns(), [{ role: 'user', content: userMsg }], 2200);
+    state.designs = parseDesignsJSON(raw);
+    state.designEscolhido = null;
+    irParaEtapa(2);
+    await salvarSessao();
+  } catch (err) {
+    toast('Erro ao gerar designs: ' + err.message, 'error');
+  } finally { setLoading(false); }
+}
+
+async function escolherDesign(i) {
+  state.designEscolhido = state.designs[i];
+  state.refinamento = { messages: [], rodada: 0, concluido: false, sintese: '' };
+  irParaEtapa(3);
+  await salvarSessao();
+  await iniciarRefinamento();
+}
+
+async function iniciarRefinamento() {
+  setLoading(true, 'O Arquiteto está formulando a primeira pergunta...');
+  try {
+    const trigger = 'Por favor, inicie o refinamento com a primeira pergunta operacional.';
+    state.refinamento.messages = [{ role: 'user', content: trigger }];
+    const resp = await callIA(promptRefinamento(state), state.refinamento.messages, 1200);
+    state.refinamento.messages.push({ role: 'assistant', content: resp });
+    state.refinamento.rodada = 1;
+    renderDialogoRefinamento();
+    await salvarSessao();
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  } finally { setLoading(false); }
+}
+
+async function enviarRespostaRefinamento(texto) {
+  state.refinamento.messages.push({ role: 'user', content: texto });
+  renderDialogoRefinamento();
+  await salvarSessao();
+  setLoading(true, 'O Arquiteto está pensando...');
+  try {
+    const resp = await callIA(promptRefinamento(state), state.refinamento.messages, 1500);
+    state.refinamento.messages.push({ role: 'assistant', content: resp });
+    if (/REFINAMENTO_CONCLU[ÍI]DO/.test(resp)) {
+      const partes = resp.split(/REFINAMENTO_CONCLU[ÍI]DO/);
+      state.refinamento.sintese = (partes[1] || '').trim();
+      state.refinamento.concluido = true;
+      renderDialogoRefinamento();
+      await salvarSessao();
+      setTimeout(gerarProtocolo, 600);
+      return;
+    }
+    state.refinamento.rodada += 1;
+    renderDialogoRefinamento();
+    await salvarSessao();
+  } catch (err) {
+    state.refinamento.messages.pop();
+    toast('Erro: ' + err.message, 'error');
+  } finally { setLoading(false); }
+}
+
+async function gerarProtocolo() {
+  setLoading(true, 'Sintetizando o protocolo metodológico...');
+  try {
+    const dialogo = state.refinamento.messages
+      .filter(m => m.content !== 'Por favor, inicie o refinamento com a primeira pergunta operacional.')
+      .map(m => `${m.role === 'user' ? 'Pesquisador' : 'Arquiteto'}: ${m.content}`).join('\n\n');
+    const userMsg = `Projeto:
+- Pergunta: ${state.projeto.pergunta}
+- Objetivo: ${state.projeto.objetivo}
+- Tipo: ${state.projeto.tipo}
+- Design escolhido: ${state.designEscolhido.nome}
+
+Diálogo de refinamento:
+${dialogo}
+
+${state.refinamento.sintese ? 'Síntese final:\n' + state.refinamento.sintese : ''}
+
+Gere o protocolo metodológico provisório.`;
+    const protocolo = await callIA(promptProtocolo(), [{ role: 'user', content: userMsg }], 1000);
+    state.protocoloFinal = protocolo.trim();
+    irParaEtapa(4);
+    await salvarSessao();
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  } finally { setLoading(false); }
+}
+
+async function enviarContinuacao(texto) {
+  state.continuacao.push({ role: 'user', content: texto });
+  renderDialogoContinuacao();
+  await salvarSessao();
+  setLoading(true, 'O Arquiteto está pensando...');
+  try {
+    const messages = state.continuacao.map(m => ({ role: m.role, content: m.content }));
+    const resp = await callIA(promptContinuacao(state), messages, 1500);
+    state.continuacao.push({ role: 'assistant', content: resp });
+    renderDialogoContinuacao();
+    await salvarSessao();
+  } catch (err) {
+    state.continuacao.pop();
+    toast('Erro: ' + err.message, 'error');
+  } finally { setLoading(false); }
+}
+
+// ========== PDF ==========
+function exportarPDF() {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const margin = 22;
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const contentW = pageW - 2 * margin;
+    let y = margin;
+
+    function check(n) { if (y + n > pageH - margin - 10) { addFooter(); doc.addPage(); y = margin; } }
+    function addFooter() {
+      const p = doc.internal.getCurrentPageInfo().pageNumber;
+      doc.setFont('times', 'italic'); doc.setFontSize(9); doc.setTextColor(120);
+      doc.text(`O Arquiteto — ${state.title || 'Sessão'} — pág. ${p}`, pageW/2, pageH-12, { align: 'center' });
+      doc.setTextColor(0);
+    }
+    function title(t) { check(16); doc.setFont('times','bold'); doc.setFontSize(18); doc.setTextColor(40); doc.splitTextToSize(t, contentW).forEach(l=>{doc.text(l,margin,y);y+=8;}); doc.setTextColor(0); y+=3; }
+    function heading(t) { check(14); y+=4; doc.setFont('times','bold'); doc.setFontSize(13); doc.setTextColor(107,44,44); doc.text(t,margin,y); doc.setTextColor(0); y+=6; doc.setDrawColor(200); doc.line(margin,y-4,margin+30,y-4); }
+    function paragraph(t,opts){ if(!t) return; opts=opts||{}; doc.setFont('times', opts.italic?'italic':'normal'); doc.setFontSize(opts.size||11); doc.splitTextToSize(t, contentW).forEach(l=>{check(6); doc.text(l,margin,y); y+=5.5;}); y+=2; }
+    function label(l,t){ if(!t) return; check(10); doc.setFont('times','bold'); doc.setFontSize(10); doc.text(l.toUpperCase(),margin,y); y+=4.5; paragraph(t); }
+
+    title('Protocolo Metodológico Provisório');
+    doc.setFont('times','italic'); doc.setFontSize(10); doc.setTextColor(110);
+    const data = state.createdAt ? new Date(state.createdAt).toLocaleDateString('pt-BR') : '';
+    doc.text(`${aluno.nome} · ${data} · Seminário de Pesquisa / FADISP`, margin, y);
+    doc.setTextColor(0); y+=8;
+
+    heading('1. Projeto de pesquisa');
+    label('Pergunta', state.projeto.pergunta);
+    label('Objetivo geral', state.projeto.objetivo);
+    label('Tipo de pesquisa', state.projeto.tipo);
+    if (state.projeto.hipotese) label('Hipótese provisória', state.projeto.hipotese);
+
+    if (state.designEscolhido) {
+      heading('2. Design metodológico escolhido');
+      paragraph(`${state.designEscolhido.nome} (${state.designEscolhido.tag})`);
+      paragraph(state.designEscolhido.descricao);
+      label('Abordagem', state.designEscolhido.abordagem);
+      label('Técnica', state.designEscolhido.tecnica);
+      label('Fontes', state.designEscolhido.fontes);
+      label('Análise', state.designEscolhido.analise);
+      label('Exige', state.designEscolhido.exigencias);
+      label('Desafio central', state.designEscolhido.desafio);
+    }
+
+    if (state.refinamento.messages.length > 1) {
+      heading('3. Diálogo de refinamento');
+      state.refinamento.messages
+        .filter(m => m.content !== 'Por favor, inicie o refinamento com a primeira pergunta operacional.')
+        .forEach(m => {
+          let c = m.content.replace(/REFINAMENTO_CONCLU[ÍI]DO\s*/g, '').trim();
+          if (c) label(m.role === 'user' ? 'Pesquisador' : 'Arquiteto', c);
+        });
+    }
+    if (state.protocoloFinal) { heading('4. Protocolo metodológico'); paragraph(state.protocoloFinal); }
+    if (state.continuacao.length) {
+      heading('5. Diálogo de continuação');
+      state.continuacao.forEach(m => label(m.role === 'user' ? 'Pesquisador' : 'Arquiteto', m.content));
+    }
+    addFooter();
+    const safe = (state.title || 'sessao').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,50);
+    doc.save(`protocolo-${safe}.pdf`);
+    toast('PDF gerado.', 'success');
+  } catch (err) {
+    toast('Erro PDF: ' + err.message, 'error');
+  }
+}
+
+// ========== RENDER ==========
+function irParaEtapa(n) {
+  state.etapaAtual = n;
+  for (let i=1;i<=4;i++) document.getElementById('etapa'+i).classList.toggle('hidden', i!==n);
+  document.querySelectorAll('.step').forEach(el => {
+    const s = parseInt(el.dataset.step, 10);
+    el.classList.toggle('active', s===n);
+    el.classList.toggle('done', s<n);
+  });
+  if (n===1) renderEtapa1();
+  if (n===2) renderDesigns();
+  if (n===3) { renderDialogoRefinamento(); const el=document.getElementById('designAtualNome'); if (el && state.designEscolhido) el.textContent = state.designEscolhido.nome; }
+  if (n===4) renderEtapa4();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function renderEtapa1() {
+  document.getElementById('pergunta').value = state.projeto.pergunta || '';
+  document.getElementById('objetivo').value = state.projeto.objetivo || '';
+  document.getElementById('tipo').value = state.projeto.tipo || '';
+  document.getElementById('hipotese').value = state.projeto.hipotese || '';
+}
+function renderDesigns() {
+  const grid = document.getElementById('designsGrid');
+  grid.innerHTML = '';
+  state.designs.forEach((d, i) => {
+    const c = document.createElement('article');
+    c.className = 'design-card';
+    c.innerHTML = `
+      <span class="design-tag">${escapeHTML(d.tag)}</span>
+      <h3 class="design-nome">${escapeHTML(d.nome)}</h3>
+      <p class="design-descricao">${escapeHTML(d.descricao)}</p>
+      <dl class="design-specs">
+        <dt>Abordagem</dt><dd>${escapeHTML(d.abordagem)}</dd>
+        <dt>Técnica</dt><dd>${escapeHTML(d.tecnica)}</dd>
+        <dt>Fontes</dt><dd>${escapeHTML(d.fontes)}</dd>
+        <dt>Análise</dt><dd>${escapeHTML(d.analise)}</dd>
+      </dl>
+      <div class="design-warning"><strong>Exige do pesquisador</strong>${escapeHTML(d.exigencias)}</div>
+      <div class="design-warning"><strong>Desafio central</strong>${escapeHTML(d.desafio)}</div>
+      <div class="design-actions"><button class="btn btn-primary btn-block" data-idx="${i}">Escolher este design →</button></div>`;
+    c.querySelector('button').addEventListener('click', () => escolherDesign(i));
+    grid.appendChild(c);
+  });
+}
+function renderDialogoRefinamento() {
+  const cont = document.getElementById('dialogoRefinamento');
+  cont.innerHTML = '';
+  state.refinamento.messages
+    .filter(m => m.content !== 'Por favor, inicie o refinamento com a primeira pergunta operacional.')
+    .forEach(m => cont.appendChild(buildMsg(m)));
+  const pill = document.getElementById('rodadaPill');
+  if (state.refinamento.concluido) { pill.textContent = 'Refinamento concluído ✓'; pill.style.background='#e0eee5'; pill.style.color='var(--success)'; }
+  else { pill.textContent = `Rodada ${state.refinamento.rodada} de ${MAX_RODADAS}`; pill.style.background=''; pill.style.color=''; }
+  document.getElementById('formResposta').classList.toggle('hidden', state.refinamento.concluido);
+}
+function renderDialogoContinuacao() {
+  const cont = document.getElementById('dialogoContinuacao');
+  cont.innerHTML = '';
+  state.continuacao.forEach(m => cont.appendChild(buildMsg(m)));
+}
+function buildMsg(m) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + (m.role === 'user' ? 'msg-aluno' : 'msg-arquiteto');
+  let c = m.content;
+  if (m.role === 'assistant') c = c.replace(/REFINAMENTO_CONCLU[ÍI]DO\s*/g, '');
+  d.innerHTML = `<div class="msg-label">${m.role==='user'?'Você':'O Arquiteto'}</div><div class="msg-content">${escapeHTML(c.trim())}</div>`;
+  return d;
+}
+function renderEtapa4() {
+  document.getElementById('protocoloTexto').textContent = state.protocoloFinal;
+  renderDialogoContinuacao();
+}
+
+// ========== SESSÕES UI ==========
+async function abrirModalSessoes() {
+  setLoading(true, 'Carregando suas sessões...');
+  try {
+    const sessoes = await listarSessoes();
+    const cont = document.getElementById('sessoesList');
+    if (!sessoes.length) {
+      cont.innerHTML = '<div class="sessoes-empty">Nenhuma sessão salva ainda.<br>Comece preenchendo o projeto.</div>';
+    } else {
+      cont.innerHTML = '';
+      sessoes.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'sessao-item' + (s.id === state.id ? ' atual' : '');
+        const dt = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+        const status = s.temProtocolo ? 'completo' : `etapa ${s.etapaAtual || 1}`;
+        const cls = s.temProtocolo ? 'completo' : '';
+        item.innerHTML = `
+          <div class="sessao-info">
+            <div class="sessao-titulo">${escapeHTML(s.title || 'Sessão sem título')}</div>
+            <div class="sessao-meta">
+              <span class="sessao-status ${cls}">${status}</span>
+              <span>${dt}</span>
+            </div>
+          </div>
+          <div class="sessao-actions">
+            <button class="btn btn-ghost" data-action="abrir" data-id="${s.id}">Abrir</button>
+            <button class="btn btn-danger" data-action="excluir" data-id="${s.id}">Excluir</button>
+          </div>`;
+        cont.appendChild(item);
+      });
+      cont.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const acao = btn.dataset.action;
+          if (acao === 'abrir') {
+            setLoading(true, 'Carregando sessão...');
+            try {
+              const s = await obterSessao(id);
+              state = { ...createBlankState(), ...s };
+              state.refinamento = state.refinamento || { messages: [], rodada: 0, concluido: false, sintese: '' };
+              state.continuacao = state.continuacao || [];
+              localStorage.setItem(ACTIVE_KEY, id);
+              closeAllModals();
+              irParaEtapa(state.etapaAtual || 1);
+              toast('Sessão carregada.', 'success');
+            } catch (err) { toast(err.message, 'error'); }
+            finally { setLoading(false); }
+          } else if (acao === 'excluir') {
+            if (!confirm('Excluir esta sessão? Esta ação não pode ser desfeita.')) return;
+            try {
+              await excluirSessao(id);
+              if (state.id === id) novaSessao();
+              else abrirModalSessoes();
+              toast('Sessão excluída.');
+            } catch (err) { toast(err.message, 'error'); }
+          }
+        });
+      });
+    }
+    document.getElementById('modalSessoes').classList.remove('hidden');
+  } catch (err) { toast(err.message, 'error'); }
+  finally { setLoading(false); }
+}
+
+function abrirModalConta() {
+  document.getElementById('contaNome').textContent = aluno.nome;
+  document.getElementById('contaEmail').textContent = aluno.email;
+  if (aluno.criadoEm) {
+    document.getElementById('contaDesde').textContent = 'Cadastro em ' + new Date(aluno.criadoEm).toLocaleDateString('pt-BR');
+  }
+  document.getElementById('modalConta').classList.remove('hidden');
+}
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+}
+
+// ========== UI HELPERS ==========
+function setLoading(on, msg) {
+  const el = document.getElementById('loading');
+  if (on) { document.getElementById('loadingMsg').textContent = msg || 'Processando...'; el.classList.remove('hidden'); }
+  else el.classList.add('hidden');
+}
+let toastT;
+function toast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (kind ? ' ' + kind : '');
+  t.classList.remove('hidden');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.add('hidden'), 4000);
+}
+function escapeHTML(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+async function copyToClipboard(text) {
+  try { await navigator.clipboard.writeText(text); toast('Protocolo copiado.', 'success'); }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); toast('Protocolo copiado.', 'success');
+  }
+}
+
+// Máscara de CPF
+function mascararCPF(v) {
+  v = v.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/,'$1.$2.$3-$4');
+  if (v.length > 6) return v.replace(/(\d{3})(\d{3})(\d{1,3})/,'$1.$2.$3');
+  if (v.length > 3) return v.replace(/(\d{3})(\d{1,3})/,'$1.$2');
+  return v;
+}
+
+// ========== EVENTOS ==========
+function bindEvents() {
+  // Auth tabs
+  document.querySelectorAll('.auth-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      const tab = t.dataset.tab;
+      document.querySelectorAll('.auth-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+      document.getElementById('formLogin').classList.toggle('hidden', tab !== 'login');
+      document.getElementById('formCadastro').classList.toggle('hidden', tab !== 'cadastro');
+    });
+  });
+
+  // CPF mask
+  ['loginCpf','cadCpf'].forEach(id => {
+    document.getElementById(id).addEventListener('input', e => { e.target.value = mascararCPF(e.target.value); });
+  });
+
+  // PIN: only digits
+  document.querySelectorAll('input.pin').forEach(inp => {
+    inp.addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0,4); });
+  });
+
+  // Form login
+  document.getElementById('formLogin').addEventListener('submit', async e => {
+    e.preventDefault();
+    const cpf = document.getElementById('loginCpf').value;
+    const pin = document.getElementById('loginPin').value;
+    setLoading(true, 'Entrando...');
+    try {
+      await fazerLogin(cpf, pin);
+      setLoading(false);
+      iniciarApp();
+    } catch (err) {
+      setLoading(false);
+      toast(err.message, 'error');
+    }
+  });
+
+  // Form cadastro
+  document.getElementById('formCadastro').addEventListener('submit', async e => {
+    e.preventDefault();
+    const cpf = document.getElementById('cadCpf').value;
+    const nome = document.getElementById('cadNome').value;
+    const email = document.getElementById('cadEmail').value;
+    const pin = document.getElementById('cadPin').value;
+    const pin2 = document.getElementById('cadPin2').value;
+    const consent = document.getElementById('cadConsent').checked;
+
+    if (pin !== pin2) return toast('As senhas não coincidem.', 'error');
+    if (!consent) return toast('Você precisa concordar com o termo.', 'error');
+
+    setLoading(true, 'Criando sua conta...');
+    try {
+      await fazerCadastro({ cpf, nome, email, pin, consentimento: true });
+      setLoading(false);
+      iniciarApp();
+      toast('Conta criada. Bem-vindo(a)!', 'success');
+    } catch (err) {
+      setLoading(false);
+      toast(err.message, 'error');
+    }
+  });
+
+  // Header buttons
+  document.getElementById('btnSessoes').addEventListener('click', abrirModalSessoes);
+  document.getElementById('btnNovaSessao').addEventListener('click', () => {
+    if (state.projeto.pergunta || state.designs.length) {
+      if (!confirm('Iniciar uma nova sessão? A atual já está salva e ficará em "Minhas sessões".')) return;
+    }
+    novaSessao();
+  });
+  document.getElementById('btnConta').addEventListener('click', abrirModalConta);
+  document.getElementById('btnLogout').addEventListener('click', () => logout());
+  document.getElementById('btnExcluirConta').addEventListener('click', excluirConta);
+
+  document.querySelectorAll('[data-close-modal]').forEach(b => {
+    b.addEventListener('click', () => document.getElementById(b.dataset.closeModal).classList.add('hidden'));
+  });
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllModals(); });
+
+  // Form projeto
+  document.getElementById('formProjeto').addEventListener('submit', e => {
+    e.preventDefault();
+    state.projeto = {
+      pergunta: document.getElementById('pergunta').value.trim(),
+      objetivo: document.getElementById('objetivo').value.trim(),
+      tipo: document.getElementById('tipo').value,
+      hipotese: document.getElementById('hipotese').value.trim()
+    };
+    if (!state.id) {
+      state.id = crypto.randomUUID ? crypto.randomUUID() : 'sess_' + Date.now();
+      state.createdAt = Date.now();
+    }
+    gerarDesigns();
+  });
+
+  document.getElementById('btnVoltarEtapa1').addEventListener('click', () => irParaEtapa(1));
+
+  document.getElementById('formResposta').addEventListener('submit', e => {
+    e.preventDefault();
+    const ta = document.getElementById('respostaInput');
+    const t = ta.value.trim();
+    if (!t) return;
+    ta.value = '';
+    enviarRespostaRefinamento(t);
+  });
+
+  document.getElementById('btnCopiar').addEventListener('click', () => copyToClipboard(state.protocoloFinal));
+  document.getElementById('btnPdf').addEventListener('click', exportarPDF);
+  document.getElementById('btnRegerar').addEventListener('click', () => {
+    if (confirm('Regerar o protocolo a partir do mesmo diálogo?')) gerarProtocolo();
+  });
+
+  document.getElementById('formContinuacao').addEventListener('submit', e => {
+    e.preventDefault();
+    const ta = document.getElementById('continuacaoInput');
+    const t = ta.value.trim();
+    if (!t) return;
+    ta.value = '';
+    enviarContinuacao(t);
+  });
+
+  ['respostaInput','continuacaoInput'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        e.target.closest('form').requestSubmit();
+      }
+    });
+  });
+}
+
+// ========== INIT ==========
+async function iniciarApp() {
+  mostrarTelaApp();
+  // Tenta restaurar última sessão ativa
+  const activeId = localStorage.getItem(ACTIVE_KEY);
+  if (activeId) {
+    try {
+      const s = await obterSessao(activeId);
+      state = { ...createBlankState(), ...s };
+      state.refinamento = state.refinamento || { messages: [], rodada: 0, concluido: false, sintese: '' };
+      state.continuacao = state.continuacao || [];
+      irParaEtapa(state.etapaAtual || 1);
+      return;
+    } catch { /* segue para nova sessão */ }
+  }
+  await novaSessao();
+}
+
+async function init() {
+  bindEvents();
+  const ok = await tryAutoLogin();
+  if (ok) await iniciarApp();
+  else mostrarTelaAuth();
+}
+
+init();
+</script>
+</body>
+</html>
