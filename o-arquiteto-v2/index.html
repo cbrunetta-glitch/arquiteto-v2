@@ -1,846 +1,231 @@
+// helpers/index.js — utilitários compartilhados por todas as funções serverless.
+// Conecta no Redis via REDIS_URL (variável criada automaticamente pela Vercel).
 
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>O Arquiteto — Design Metodológico</title>
-<style>
-  :root {
-    --navy:      #1B2A4A;
-    --navy-mid:  #243558;
-    --navy-l:    #2E4470;
-    --gold:      #C9A84C;
-    --gold-l:    #E8C96A;
-    --cream:     #F5F2EB;
-    --white:     #FFFFFF;
-    --off-white: #F0EDE6;
-    --text:      #1A1A2E;
-    --text-mid:  #3D4F6E;
-    --text-light:#8A9BB5;
-    --red:       #C0392B;
-    --green:     #1A7A4A;
-    --teal:      #2A6A6A;
-    --border:    #D4C9A8;
-    --shadow:    0 4px 20px rgba(27,42,74,0.13);
-    --radius:    10px;
-  }
+const crypto = require('crypto');
+const { createClient } = require('redis');
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+// ============================================================
+//  REDIS — cliente reutilizado entre invocations quentes
+// ============================================================
 
-  body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background: var(--cream);
-    color: var(--text);
-    min-height: 100vh;
-  }
+const REDIS_URL = process.env.REDIS_URL || process.env.KV_URL;
 
-  /* ── HEADER ── */
-  header {
-    background: var(--navy);
-    padding: 0;
-    border-bottom: 3px solid var(--gold);
-  }
-  .header-inner {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 22px 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  .header-icon {
-    width: 48px; height: 48px;
-    background: var(--gold);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; flex-shrink: 0;
-  }
-  header h1 {
-    font-size: 22px; font-weight: 700; color: var(--white);
-    letter-spacing: 0.5px;
-  }
-  header p {
-    font-size: 12px; color: var(--text-light); margin-top: 2px;
-  }
-  .badge {
-    margin-left: auto;
-    background: var(--gold);
-    color: var(--navy);
-    font-size: 10px; font-weight: 700;
-    padding: 4px 10px; border-radius: 20px;
-    letter-spacing: 1px; white-space: nowrap;
-  }
+let _client = null;
 
-  /* ── MAIN ── */
-  main {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 28px 24px 60px;
+async function getClient() {
+  if (_client && _client.isReady) return _client;
+  if (_client) {
+    try { await _client.disconnect(); } catch {}
+    _client = null;
   }
+  if (!REDIS_URL) throw new Error('REDIS_URL não configurada no servidor.');
+  _client = createClient({
+    url: REDIS_URL,
+    socket: { connectTimeout: 10000, reconnectStrategy: false }
+  });
+  _client.on('error', () => { /* evita crash por erro não tratado */ });
+  await _client.connect();
+  return _client;
+}
 
-  /* ── API KEY (hidden — configured in JS) ── */
+async function kvGet(key) {
+  const c = await getClient();
+  const raw = await c.get(key);
+  if (raw === null || raw === undefined) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
 
-  /* ── PROGRESS STEPS ── */
-  .steps {
-    display: flex; gap: 0;
-    margin-bottom: 28px;
-    border-radius: var(--radius);
-    overflow: hidden;
-    border: 1px solid var(--border);
+async function kvSet(key, value, ttlSeconds) {
+  const c = await getClient();
+  const v = JSON.stringify(value);
+  if (ttlSeconds) await c.set(key, v, { EX: ttlSeconds });
+  else await c.set(key, v);
+  return 'OK';
+}
+
+async function kvDel(key) {
+  const c = await getClient();
+  return c.del(key);
+}
+
+async function kvExpire(key, seconds) {
+  const c = await getClient();
+  return c.expire(key, seconds);
+}
+
+async function kvSAdd(set, value) {
+  const c = await getClient();
+  return c.sAdd(set, value);
+}
+
+async function kvSRem(set, value) {
+  const c = await getClient();
+  return c.sRem(set, value);
+}
+
+async function kvSMembers(set) {
+  const c = await getClient();
+  const r = await c.sMembers(set);
+  return Array.isArray(r) ? r : [];
+}
+
+// ============================================================
+//  Criptografia
+// ============================================================
+
+const ENC_KEY_HEX = process.env.ENCRYPTION_KEY;
+
+function getEncKey() {
+  if (!ENC_KEY_HEX) throw new Error('ENCRYPTION_KEY não configurada.');
+  const buf = Buffer.from(ENC_KEY_HEX, 'hex');
+  if (buf.length !== 32) throw new Error('ENCRYPTION_KEY deve ter 64 caracteres hex (32 bytes).');
+  return buf;
+}
+
+function sha256(input) {
+  return crypto.createHash('sha256').update(input).digest('hex');
+}
+
+function hashCPF(cpf) {
+  const clean = String(cpf).replace(/\D/g, '');
+  return sha256('arquiteto-cpf-v1:' + clean);
+}
+
+function encryptCPF(cpf) {
+  const clean = String(cpf).replace(/\D/g, '');
+  const key = getEncKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(clean, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, enc]).toString('base64');
+}
+
+function decryptCPF(encoded) {
+  const key = getEncKey();
+  const buf = Buffer.from(encoded, 'base64');
+  const iv = buf.slice(0, 12);
+  const tag = buf.slice(12, 28);
+  const enc = buf.slice(28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(enc, null, 'utf8') + decipher.final('utf8');
+}
+
+function hashPassword(password, salt) {
+  if (!salt) salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(String(password), salt, 100000, 64, 'sha256').toString('hex');
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  const { hash } = hashPassword(password, salt);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(expectedHash, 'hex'));
+  } catch {
+    return false;
   }
-  .step {
-    flex: 1; padding: 10px 8px;
-    text-align: center;
-    background: var(--white);
-    font-size: 11px; font-weight: 600;
-    color: var(--text-light);
-    border-right: 1px solid var(--border);
-    cursor: default;
-    transition: background 0.2s;
-  }
-  .step:last-child { border-right: none; }
-  .step.active   { background: var(--navy); color: var(--gold); }
-  .step.done     { background: var(--off-white); color: var(--green); }
-  .step-num {
-    display: block; font-size: 15px; margin-bottom: 2px;
-  }
+}
 
-  /* ── CARDS ── */
-  .card {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    margin-bottom: 20px;
-    box-shadow: var(--shadow);
-  }
-  .card-title {
-    font-size: 14px; font-weight: 700; color: var(--navy);
-    text-transform: uppercase; letter-spacing: 1px;
-    margin-bottom: 4px;
-  }
-  .card-subtitle {
-    font-size: 13px; color: var(--text-mid); margin-bottom: 18px;
-  }
-  .card-gold {
-    background: var(--navy);
-    border-color: var(--gold);
-  }
-  .card-gold .card-title { color: var(--gold); }
-  .card-gold .card-subtitle { color: var(--text-light); }
+function timingSafeEqualString(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
 
-  /* ── FORM FIELDS ── */
-  .field { margin-bottom: 16px; }
-  .field label {
-    display: block; font-size: 12px; font-weight: 600;
-    color: var(--text-mid); text-transform: uppercase; letter-spacing: 0.5px;
-    margin-bottom: 6px;
-  }
-  .field textarea, .field select, .field input[type="text"] {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-size: 13px;
-    font-family: inherit;
-    color: var(--text);
-    background: var(--cream);
-    outline: none;
-    resize: vertical;
-    transition: border-color 0.2s;
-  }
-  .field textarea:focus,
-  .field select:focus,
-  .field input[type="text"]:focus {
-    border-color: var(--gold);
-    background: var(--white);
-  }
-  .field small { font-size: 11px; color: var(--text-light); margin-top: 4px; display: block; }
+function randomToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
-  /* ── BUTTONS ── */
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    border: none; border-radius: 8px;
-    padding: 12px 22px;
-    font-size: 14px; font-weight: 700;
-    cursor: pointer; transition: all 0.18s;
-    font-family: inherit;
-  }
-  .btn-primary {
-    background: var(--gold); color: var(--navy);
-  }
-  .btn-primary:hover { background: var(--gold-l); transform: translateY(-1px); }
-  .btn-primary:disabled {
-    opacity: 0.45; cursor: not-allowed; transform: none;
-  }
-  .btn-ghost {
-    background: transparent; color: var(--text-mid);
-    border: 1px solid var(--border);
-  }
-  .btn-ghost:hover { background: var(--off-white); }
-  .btn-navy {
-    background: var(--navy); color: var(--white);
-  }
-  .btn-navy:hover { background: var(--navy-l); }
-  .btn-row { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+// ============================================================
+//  Validações
+// ============================================================
 
-  /* ── LOADING ── */
-  .loading {
-    display: flex; align-items: center; gap: 12px;
-    padding: 18px; color: var(--text-mid); font-size: 14px;
-  }
-  .spinner {
-    width: 22px; height: 22px;
-    border: 3px solid var(--border);
-    border-top-color: var(--gold);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+function formatCPF(cpf) {
+  const c = String(cpf).replace(/\D/g, '');
+  if (c.length !== 11) return cpf;
+  return `${c.slice(0,3)}.${c.slice(3,6)}.${c.slice(6,9)}-${c.slice(9,11)}`;
+}
 
-  /* ── DESIGN OPTIONS ── */
-  .designs-grid { display: grid; gap: 16px; }
+function validateCPF(cpf) {
+  const c = String(cpf).replace(/\D/g, '');
+  if (c.length !== 11) return false;
+  if (/^(\d)\1+$/.test(c)) return false;
 
-  .design-card {
-    border: 2px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.18s;
-    background: var(--white);
-    position: relative;
-  }
-  .design-card:hover { border-color: var(--gold); transform: translateY(-2px); box-shadow: var(--shadow); }
-  .design-card.selected {
-    border-color: var(--gold);
-    background: #FFFDF5;
-    box-shadow: 0 0 0 3px rgba(201,168,76,0.18);
-  }
-  .design-tag {
-    display: inline-block;
-    background: var(--navy);
-    color: var(--gold);
-    font-size: 10px; font-weight: 700;
-    padding: 3px 10px; border-radius: 20px;
-    letter-spacing: 1px;
-    margin-bottom: 10px;
-  }
-  .design-name {
-    font-size: 16px; font-weight: 700; color: var(--navy);
-    margin-bottom: 8px;
-  }
-  .design-desc { font-size: 13px; color: var(--text-mid); line-height: 1.55; margin-bottom: 14px; }
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(c[i], 10) * (10 - i);
+  let d1 = 11 - (sum % 11);
+  if (d1 >= 10) d1 = 0;
+  if (d1 !== parseInt(c[9], 10)) return false;
 
-  .design-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .meta-item { background: var(--cream); border-radius: 6px; padding: 10px 12px; }
-  .meta-label { font-size: 10px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
-  .meta-value { font-size: 12px; color: var(--text); }
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(c[i], 10) * (11 - i);
+  let d2 = 11 - (sum % 11);
+  if (d2 >= 10) d2 = 0;
+  if (d2 !== parseInt(c[10], 10)) return false;
 
-  .design-alert {
-    margin-top: 12px;
-    background: #FFF8E6;
-    border-left: 3px solid var(--gold);
-    padding: 8px 12px;
-    font-size: 12px; color: var(--text-mid);
-    border-radius: 0 6px 6px 0;
-  }
+  return true;
+}
 
-  /* ── REFINEMENT QUESTIONS ── */
-  .refine-q {
-    background: var(--off-white);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-  .refine-q p { font-size: 14px; font-weight: 600; color: var(--navy); margin-bottom: 10px; }
-  .refine-q small { font-size: 11px; color: var(--text-light); display: block; margin-bottom: 8px; }
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email).trim());
+}
 
-  /* ── PROTOCOL OUTPUT ── */
-  .protocol-box {
-    background: var(--navy);
-    border-radius: var(--radius);
-    padding: 24px;
-    color: var(--white);
-    margin-bottom: 16px;
-  }
-  .protocol-box h3 { color: var(--gold); margin-bottom: 16px; font-size: 14px; letter-spacing: 1px; }
-  .protocol-section { margin-bottom: 14px; }
-  .protocol-label { font-size: 10px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-  .protocol-value { font-size: 13px; color: var(--off-white); line-height: 1.55; }
+const PINS_OBVIOS = new Set([
+  '0000','1111','2222','3333','4444','5555','6666','7777','8888','9999',
+  '1234','2345','3456','4567','5678','6789','0123',
+  '4321','5432','6543','7654','8765','9876','3210',
+  '1212','2121','1010','0101','2020','1313','6969'
+]);
 
-  .copy-btn {
-    background: var(--gold);
-    color: var(--navy);
-    border: none; border-radius: 6px;
-    padding: 10px 18px;
-    font-size: 13px; font-weight: 700;
-    cursor: pointer; font-family: inherit;
-  }
-  .copy-btn:hover { background: var(--gold-l); }
+function validatePIN(pin) {
+  const p = String(pin || '');
+  if (!/^\d{4}$/.test(p)) return { ok: false, reason: 'A senha deve ter exatamente 4 dígitos.' };
+  if (PINS_OBVIOS.has(p)) return { ok: false, reason: 'Senha óbvia demais. Escolha outra combinação.' };
+  return { ok: true };
+}
 
-  /* ── CHAT (refinement dialog) ── */
-  .chat-bubble {
-    padding: 12px 16px;
-    border-radius: 10px;
-    font-size: 13px;
-    line-height: 1.6;
-    margin-bottom: 10px;
-    max-width: 92%;
-  }
-  .chat-arquiteto {
-    background: var(--navy);
-    color: var(--off-white);
-    border-bottom-left-radius: 2px;
-  }
-  .chat-aluno {
-    background: var(--off-white);
-    color: var(--text);
-    border-bottom-right-radius: 2px;
-    margin-left: auto;
-    border: 1px solid var(--border);
-  }
-  .chat-role {
-    font-size: 10px; font-weight: 700; letter-spacing: 1px;
-    margin-bottom: 5px;
-  }
-  .chat-arquiteto .chat-role { color: var(--gold); }
-  .chat-aluno .chat-role { color: var(--text-mid); }
+// ============================================================
+//  Autenticação por token (Bearer)
+// ============================================================
 
-  .chat-input-row { display: flex; gap: 10px; margin-top: 12px; }
-  .chat-input-row textarea {
-    flex: 1;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 13px;
-    font-family: inherit;
-    resize: none;
-    outline: none;
-  }
-  .chat-input-row textarea:focus { border-color: var(--gold); }
+const TOKEN_TTL_ALUNO = 7 * 24 * 60 * 60;
+const TOKEN_TTL_PAINEL = 12 * 60 * 60;
 
-  /* ── ERROR ── */
-  .error-box {
-    background: #FFEBEE;
-    border: 1px solid var(--red);
-    border-radius: 8px;
-    padding: 14px 16px;
-    font-size: 13px; color: var(--red);
-    margin: 12px 0;
-  }
+async function authenticateRequest(req) {
+  const auth = req.headers && req.headers.authorization ? req.headers.authorization : '';
+  if (!auth.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  const cpfHash = await kvGet('token:' + token);
+  if (!cpfHash) return null;
+  const aluno = await kvGet('aluno:' + cpfHash);
+  if (!aluno) return null;
+  await kvExpire('token:' + token, TOKEN_TTL_ALUNO);
+  aluno.ultimoAcesso = Date.now();
+  await kvSet('aluno:' + cpfHash, aluno);
+  return { cpfHash, aluno, token };
+}
 
-  /* ── DIVIDER ── */
-  hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+async function authenticatePainel(req) {
+  const auth = req.headers && req.headers.authorization ? req.headers.authorization : '';
+  if (!auth.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  const v = await kvGet('painel_token:' + token);
+  if (!v) return null;
+  await kvExpire('painel_token:' + token, TOKEN_TTL_PAINEL);
+  return { token };
+}
 
-  /* ── RESPONSIVE ── */
-  @media (max-width: 600px) {
-    .design-meta { grid-template-columns: 1fr; }
-    .btn-row { flex-direction: column; }
-  }
-</style>
-</head>
-<body>
+// ============================================================
+//  Exports
+// ============================================================
 
-<header>
-  <div class="header-inner">
-    <div class="header-icon">🏛️</div>
-    <div>
-      <h1>O Arquiteto</h1>
-      <p>Design metodológico para pesquisa jurídica · Doutorado em Direito · Fadisp / Dinter MT</p>
-    </div>
-    <span class="badge">AULA 3</span>
-  </div>
-</header>
-
-<main>
-
-  <!-- API key configured in JS constant below -->
-
-  <!-- STEPS -->
-  <div class="steps" id="stepsBar">
-    <div class="step active" id="step-1"><span class="step-num">①</span>Meu Projeto</div>
-    <div class="step" id="step-2"><span class="step-num">②</span>Designs Possíveis</div>
-    <div class="step" id="step-3"><span class="step-num">③</span>Refinamento</div>
-    <div class="step" id="step-4"><span class="step-num">④</span>Protocolo Final</div>
-  </div>
-
-  <!-- ── ETAPA 1: DADOS DO PROJETO ── -->
-  <div id="section-1">
-    <div class="card">
-      <div class="card-title">Etapa 1 — Meu Projeto de Pesquisa</div>
-      <div class="card-subtitle">Preencha os campos com base nas entregas das Aulas 1 e 2</div>
-
-      <div class="field">
-        <label>Pergunta de Pesquisa</label>
-        <textarea id="pergunta" rows="3" placeholder="Ex.: Em que medida a adoção de governança digital pelos municípios mato-grossenses amplia a efetividade do controle externo do TCE-MT?"></textarea>
-        <small>Use a versão refinada da sua pergunta — a mais precisa que você tem até agora.</small>
-      </div>
-
-      <div class="field">
-        <label>Objetivo Geral</label>
-        <textarea id="objetivo" rows="2" placeholder="Ex.: Analisar a relação entre governança digital municipal e efetividade do controle externo do TCE-MT (2019–2023)."></textarea>
-      </div>
-
-      <div class="field">
-        <label>Tipo de Pesquisa</label>
-        <select id="tipo">
-          <option value="">— Selecione —</option>
-          <option value="exploratória">Exploratória — investigar fenômeno pouco estudado</option>
-          <option value="descritiva">Descritiva — caracterizar fenômeno existente</option>
-          <option value="explicativa">Explicativa — demonstrar causalidade ou relação</option>
-          <option value="prescritiva (lege ferenda)">Prescritiva (lege ferenda) — propor o que deveria ser</option>
-          <option value="prescritiva (lege lata)">Prescritiva (lege lata) — propor interpretação do direito posto</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label>Hipótese Provisória <span style="font-weight:400;color:var(--text-light)">(opcional)</span></label>
-        <textarea id="hipotese" rows="2" placeholder="Ex.: A adoção de sistemas de e-procurement reduz em pelo menos 30% os achados de auditoria do TCE-MT em obras municipais."></textarea>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnGerar" onclick="gerarDesigns()">
-          🏛️ Gerar Designs Metodológicos
-        </button>
-      </div>
-    </div>
-    <div id="error-1" class="error-box" style="display:none"></div>
-  </div>
-
-  <!-- ── ETAPA 2: DESIGNS ── -->
-  <div id="section-2" style="display:none">
-    <div class="card card-gold">
-      <div class="card-title">Etapa 2 — Designs Metodológicos Possíveis</div>
-      <div class="card-subtitle">O Arquiteto identificou 3 caminhos para a sua pesquisa. Analise cada um — depois escolha.</div>
-    </div>
-    <div id="loading-2" class="loading" style="display:none">
-      <div class="spinner"></div>
-      Analisando sua pesquisa e mapeando designs metodológicos...
-    </div>
-    <div id="designs-container" class="designs-grid"></div>
-    <div id="error-2" class="error-box" style="display:none"></div>
-    <div class="btn-row" id="btn-row-2" style="display:none">
-      <button class="btn btn-primary" id="btnEscolher" onclick="confirmarDesign()" disabled>
-        ✓ Confirmar Escolha e Refinar
-      </button>
-      <button class="btn btn-ghost" onclick="voltarEtapa(1)">← Revisar Projeto</button>
-    </div>
-  </div>
-
-  <!-- ── ETAPA 3: REFINAMENTO ── -->
-  <div id="section-3" style="display:none">
-    <div class="card card-gold">
-      <div class="card-title">Etapa 3 — Refinamento do Design Escolhido</div>
-      <div class="card-subtitle">O Arquiteto vai fazer perguntas para tornar seu design operacional. Responda com honestidade.</div>
-    </div>
-    <div id="loading-3" class="loading" style="display:none">
-      <div class="spinner"></div>
-      Preparando as perguntas de refinamento...
-    </div>
-    <div id="chat-container"></div>
-    <div id="refine-input-area" style="display:none">
-      <div class="card-subtitle" style="margin-bottom:8px;font-size:12px">Responda à pergunta acima com o máximo de precisão que puder:</div>
-      <div class="chat-input-row">
-        <textarea id="refineInput" rows="3" placeholder="Sua resposta..."></textarea>
-        <button class="btn btn-navy" onclick="enviarRefinamento()" style="align-self:flex-end;white-space:nowrap">
-          Enviar →
-        </button>
-      </div>
-    </div>
-    <div id="btn-row-3" style="display:none" class="btn-row">
-      <button class="btn btn-primary" onclick="gerarProtocolo()">
-        📋 Gerar Protocolo Final
-      </button>
-      <button class="btn btn-ghost" onclick="voltarEtapa(2)">← Trocar Design</button>
-    </div>
-    <div id="error-3" class="error-box" style="display:none"></div>
-  </div>
-
-  <!-- ── ETAPA 4: PROTOCOLO FINAL ── -->
-  <div id="section-4" style="display:none">
-    <div class="card card-gold">
-      <div class="card-title">Etapa 4 — Protocolo Metodológico Provisório</div>
-      <div class="card-subtitle">Copie o texto abaixo e acrescente como Item 08 no seu documento acumulativo.</div>
-    </div>
-    <div id="loading-4" class="loading" style="display:none">
-      <div class="spinner"></div>
-      Sintetizando seu protocolo metodológico...
-    </div>
-    <div id="protocol-output"></div>
-    <div id="error-4" class="error-box" style="display:none"></div>
-    <div class="btn-row" id="btn-row-4" style="display:none">
-      <button class="copy-btn" onclick="copiarProtocolo()">📋 Copiar Protocolo</button>
-      <button class="btn btn-ghost" onclick="reiniciar()">↺ Nova Pesquisa</button>
-    </div>
-  </div>
-
-</main>
-
-<script>
-// ── CONFIGURAÇÃO ──────────────────────────────────────────────────────────
-// A chave de API fica no servidor (Vercel → Environment Variables).
-// Este arquivo não contém credenciais — seguro distribuir o link publicamente.
-// ─────────────────────────────────────────────────────────────────────────
-
-// ── STATE ──
-let state = {
-  step: 1,
-  projeto: {},
-  designs: [],
-  selectedDesign: null,
-  chatHistory: [],
-  refinamentoDone: false,
-  protocolo: '',
+module.exports = {
+  kvGet, kvSet, kvDel, kvExpire, kvSAdd, kvSRem, kvSMembers,
+  sha256, hashCPF, encryptCPF, decryptCPF,
+  hashPassword, verifyPassword, timingSafeEqualString, randomToken,
+  formatCPF, validateCPF, validateEmail, validatePIN,
+  authenticateRequest, authenticatePainel,
+  TOKEN_TTL_ALUNO, TOKEN_TTL_PAINEL
 };
-
-// ── API — chama o servidor Vercel, que adiciona a chave e repassa à Anthropic ──
-async function callAPI(messages, system, maxTokens = 1800) {
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Erro ${res.status}`);
-  }
-  const data = await res.json();
-  return data.content[0].text;
-}
-
-// ── STEPS ──
-function setStep(n) {
-  state.step = n;
-  for (let i = 1; i <= 4; i++) {
-    const el = document.getElementById(`step-${i}`);
-    el.className = 'step' + (i === n ? ' active' : i < n ? ' done' : '');
-  }
-}
-
-function showSection(n) {
-  for (let i = 1; i <= 4; i++) {
-    document.getElementById(`section-${i}`).style.display = i === n ? 'block' : 'none';
-  }
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function voltarEtapa(n) {
-  setStep(n);
-  showSection(n);
-}
-
-// ── ETAPA 1 → 2: GERAR DESIGNS ──
-async function gerarDesigns() {
-  const p = document.getElementById('pergunta').value.trim();
-  const o = document.getElementById('objetivo').value.trim();
-  const t = document.getElementById('tipo').value;
-  const h = document.getElementById('hipotese').value.trim();
-
-  const errEl = document.getElementById('error-1');
-  errEl.style.display = 'none';
-
-  if (!p || !o || !t) {
-    errEl.textContent = 'Preencha Pergunta, Objetivo e Tipo de Pesquisa antes de continuar.';
-    errEl.style.display = 'block'; return;
-  }
-
-  state.projeto = { pergunta: p, objetivo: o, tipo: t, hipotese: h };
-
-  setStep(2);
-  showSection(2);
-  document.getElementById('designs-container').innerHTML = '';
-  document.getElementById('btn-row-2').style.display = 'none';
-  document.getElementById('loading-2').style.display = 'flex';
-
-  const system = `Você é O Arquiteto — um consultor especializado em design metodológico para pesquisa jurídica em doutorado. Você é rigoroso, preciso e jamais genérico.
-
-Princípio fundamental: o método deve emergir da pergunta de pesquisa e dos objetivos — nunca das conveniências institucionais ou profissionais do pesquisador. Se o método mais adequado for difícil de executar, diga isso claramente. O papel do pesquisador é encontrar um modo de fazê-lo — ou rever o escopo da pesquisa. Facilidade não é critério metodológico.
-
-Sua tarefa é propor exatamente 3 designs metodológicos distintos e adequados para a pesquisa descrita. Eles devem ser genuinamente diferentes — não variações do mesmo método.
-
-Para cada design, produza um JSON com este formato exato:
-{
-  "tag": "nome curto em maiúsculas (ex: DOGMÁTICO-ANALÍTICO)",
-  "nome": "nome completo do design metodológico",
-  "descricao": "2-3 frases explicando por que este design é adequado à pergunta e aos objetivos — com ancoragem direta na pergunta formulada",
-  "abordagem": "abordagem de pesquisa (qualitativa / quantitativa / misto)",
-  "tecnica": "técnica(s) de coleta de dados específica(s)",
-  "fontes": "tipos de fontes que serão utilizadas",
-  "analise": "como os dados/fontes serão analisados",
-  "exigencias": "o que este design exige do pesquisador: competências, tempo, acesso a fontes, recursos",
-  "desafio": "o principal obstáculo metodológico que o pesquisador precisará superar para executar este design com rigor científico"
-}
-
-Responda APENAS com um array JSON com exatamente 3 objetos. Nada mais. Sem markdown, sem backticks, sem explicações fora do JSON.`;
-
-  const userMsg = `Projeto de pesquisa:
-- Pergunta: ${p}
-- Objetivo geral: ${o}
-- Tipo: ${t}
-- Hipótese: ${h || 'não informada'}
-
-Proponha 3 designs metodológicos distintos e rigorosamente fundamentados para esta pesquisa.`;
-
-  try {
-    const raw = await callAPI([{ role: 'user', content: userMsg }], system);
-    const clean = raw.replace(/```json|```/g, '').trim();
-    state.designs = JSON.parse(clean);
-    renderDesigns();
-  } catch (e) {
-    document.getElementById('loading-2').style.display = 'none';
-    document.getElementById('error-2').textContent = 'Erro: ' + e.message;
-    document.getElementById('error-2').style.display = 'block';
-  }
-}
-
-function renderDesigns() {
-  document.getElementById('loading-2').style.display = 'none';
-  const container = document.getElementById('designs-container');
-  container.innerHTML = '';
-
-  state.designs.forEach((d, i) => {
-    const card = document.createElement('div');
-    card.className = 'design-card';
-    card.id = `design-card-${i}`;
-    card.innerHTML = `
-      <div class="design-tag">${d.tag}</div>
-      <div class="design-name">${d.nome}</div>
-      <div class="design-desc">${d.descricao}</div>
-      <div class="design-meta">
-        <div class="meta-item">
-          <div class="meta-label">Abordagem</div>
-          <div class="meta-value">${d.abordagem}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Técnica</div>
-          <div class="meta-value">${d.tecnica}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Fontes</div>
-          <div class="meta-value">${d.fontes}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Análise</div>
-          <div class="meta-value">${d.analise}</div>
-        </div>
-      </div>
-      <div class="design-alert" style="margin-top:10px;background:#F0EDE6;border-left-color:var(--navy)">
-        <strong>📋 Exige:</strong> ${d.exigencias}
-      </div>
-      <div class="design-alert">
-        <strong>⚠️ Desafio central:</strong> ${d.desafio}
-      </div>
-    `;
-    card.onclick = () => selectDesign(i);
-    container.appendChild(card);
-  });
-
-  document.getElementById('btn-row-2').style.display = 'flex';
-}
-
-function selectDesign(i) {
-  state.selectedDesign = i;
-  document.querySelectorAll('.design-card').forEach((c, j) => {
-    c.classList.toggle('selected', j === i);
-  });
-  document.getElementById('btnEscolher').disabled = false;
-}
-
-// ── ETAPA 2 → 3: REFINAMENTO ──
-async function confirmarDesign() {
-  if (state.selectedDesign === null) return;
-  const d = state.designs[state.selectedDesign];
-
-  setStep(3);
-  showSection(3);
-  document.getElementById('loading-3').style.display = 'flex';
-  document.getElementById('chat-container').innerHTML = '';
-  state.chatHistory = [];
-  state.refinamentoDone = false;
-
-  const system = `Você é O Arquiteto — um consultor exigente de design metodológico jurídico. O pesquisador escolheu um design e agora você vai refiná-lo através de um diálogo.
-
-Princípio: o método serve à pergunta — não ao pesquisador. Se uma escolha metodológica for difícil mas necessária, diga isso. Facilidade não é critério.
-
-Seu protocolo:
-1. Faça UMA pergunta de refinamento por rodada — nunca mais de uma.
-2. As perguntas devem ser operacionais e exigentes: acesso concreto a fontes, definição precisa da amostra, critérios de inclusão/exclusão, forma de análise, como tratar dados ausentes, validade do método escolhido para a pergunta específica.
-3. Após 3 rodadas de perguntas e respostas, encerre com a frase exata: "REFINAMENTO_CONCLUÍDO" seguida de um parágrafo de síntese das escolhas feitas.
-4. Se uma resposta for vaga ou insuficiente, diga o que falta antes de continuar.
-5. Tom: consultor técnico experiente, direto, sem elogios desnecessários.
-
-Design escolhido: ${d.nome}
-Técnica: ${d.tecnica}
-Fontes: ${d.fontes}
-Análise: ${d.analise}
-Pergunta da tese: ${state.projeto.pergunta}
-Objetivo geral: ${state.projeto.objetivo}`;
-
-  const firstMsg = `Escolhi o design "${d.nome}". Qual é a primeira pergunta de refinamento?`;
-  state.chatHistory = [{ role: 'user', content: firstMsg }];
-
-  try {
-    const resp = await callAPI(state.chatHistory, system);
-    state.chatHistory.push({ role: 'assistant', content: resp });
-    document.getElementById('loading-3').style.display = 'none';
-    addChatBubble('O Arquiteto', resp, 'chat-arquiteto');
-
-    if (resp.includes('REFINAMENTO_CONCLUÍDO')) {
-      document.getElementById('btn-row-3').style.display = 'flex';
-      state.refinamentoDone = true;
-    } else {
-      document.getElementById('refine-input-area').style.display = 'block';
-    }
-  } catch (e) {
-    document.getElementById('loading-3').style.display = 'none';
-    document.getElementById('error-3').textContent = 'Erro: ' + e.message;
-    document.getElementById('error-3').style.display = 'block';
-  }
-}
-
-async function enviarRefinamento() {
-  const input = document.getElementById('refineInput').value.trim();
-  if (!input) return;
-  document.getElementById('refineInput').value = '';
-  document.getElementById('refine-input-area').style.display = 'none';
-
-  addChatBubble('Você', input, 'chat-aluno');
-  state.chatHistory.push({ role: 'user', content: input });
-
-  const d = state.designs[state.selectedDesign];
-  const system = `Você é O Arquiteto — consultor de design metodológico jurídico. Princípio: o método serve à pergunta, não ao pesquisador.
-
-Design: ${d.nome} | Técnica: ${d.tecnica} | Fontes: ${d.fontes}
-Pesquisa: ${state.projeto.pergunta} | Objetivo: ${state.projeto.objetivo}
-
-Após 3 rodadas de diálogo, encerre com "REFINAMENTO_CONCLUÍDO" e um parágrafo de síntese. Antes disso, faça mais UMA pergunta operacional de refinamento. Se a resposta anterior foi vaga, sinalize antes de continuar.`;
-
-  const loadRow = document.createElement('div');
-  loadRow.className = 'loading'; loadRow.id = 'loading-chat';
-  loadRow.innerHTML = '<div class="spinner"></div> O Arquiteto analisa sua resposta...';
-  document.getElementById('chat-container').appendChild(loadRow);
-
-  try {
-    const resp = await callAPI(state.chatHistory, system);
-    state.chatHistory.push({ role: 'assistant', content: resp });
-    document.getElementById('loading-chat')?.remove();
-    addChatBubble('O Arquiteto', resp, 'chat-arquiteto');
-
-    if (resp.includes('REFINAMENTO_CONCLUÍDO')) {
-      document.getElementById('btn-row-3').style.display = 'flex';
-      state.refinamentoDone = true;
-    } else {
-      document.getElementById('refine-input-area').style.display = 'block';
-    }
-  } catch (e) {
-    document.getElementById('loading-chat')?.remove();
-    document.getElementById('error-3').textContent = 'Erro: ' + e.message;
-    document.getElementById('error-3').style.display = 'block';
-  }
-}
-
-function addChatBubble(role, text, cls) {
-  const container = document.getElementById('chat-container');
-  const div = document.createElement('div');
-  div.className = `chat-bubble ${cls}`;
-  div.innerHTML = `<div class="chat-role">${role.toUpperCase()}</div>${text.replace('REFINAMENTO_CONCLUÍDO', '').replace(/\n/g, '<br>')}`;
-  container.appendChild(div);
-  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// ── ETAPA 3 → 4: PROTOCOLO ──
-async function gerarProtocolo() {
-  setStep(4);
-  showSection(4);
-  document.getElementById('loading-4').style.display = 'flex';
-
-  const d = state.designs[state.selectedDesign];
-  const dialogoResumido = state.chatHistory
-    .filter(m => m.role !== 'user' || !m.content.includes('Escolhi o design'))
-    .map(m => `${m.role === 'user' ? 'PESQUISADOR' : 'ARQUITETO'}: ${m.content}`)
-    .join('\n\n');
-
-  const system = `Você é O Arquiteto. Sintetize o design metodológico definido durante o refinamento em um PROTOCOLO METODOLÓGICO PROVISÓRIO, estruturado, formal e copiável para um documento acadêmico.
-
-O protocolo deve ter estas seções claramente delimitadas com rótulos em maiúsculas:
-ABORDAGEM METODOLÓGICA:
-TÉCNICA(S) DE COLETA:
-FONTES DA PESQUISA:
-MÉTODO DE ANÁLISE:
-RECORTE TEMPORAL E ESPACIAL:
-LIMITAÇÕES RECONHECIDAS:
-PRÓXIMOS PASSOS OPERACIONAIS:
-
-Escreva em linguagem acadêmica direta. Máximo de 400 palavras. Nenhuma introdução ou conclusão — apenas o protocolo puro.`;
-
-  const userMsg = `Projeto:
-- Pergunta: ${state.projeto.pergunta}
-- Objetivo: ${state.projeto.objetivo}
-- Design escolhido: ${d.nome}
-
-Diálogo de refinamento:
-${dialogoResumido}
-
-Gere o protocolo metodológico provisório.`;
-
-  try {
-    const resp = await callAPI([{ role: 'user', content: userMsg }], system, 1000);
-    state.protocolo = resp;
-    document.getElementById('loading-4').style.display = 'none';
-    renderProtocolo(resp);
-    document.getElementById('btn-row-4').style.display = 'flex';
-  } catch (e) {
-    document.getElementById('loading-4').style.display = 'none';
-    document.getElementById('error-4').textContent = 'Erro: ' + e.message;
-    document.getElementById('error-4').style.display = 'block';
-  }
-}
-
-function renderProtocolo(text) {
-  const box = document.getElementById('protocol-output');
-  const sections = text.split('\n').filter(l => l.trim());
-  let html = '<div class="protocol-box"><h3>📋 PROTOCOLO METODOLÓGICO PROVISÓRIO — ITEM 08</h3>';
-
-  sections.forEach(line => {
-    if (line.match(/^[A-ZÇÃÕÁÉÍÓÚ\s()]+:/)) {
-      const [label, ...rest] = line.split(':');
-      html += `<div class="protocol-section">
-        <div class="protocol-label">${label}</div>
-        <div class="protocol-value">${rest.join(':').trim()}</div>
-      </div>`;
-    } else {
-      html += `<div class="protocol-value" style="margin-bottom:8px">${line}</div>`;
-    }
-  });
-
-  html += '</div>';
-  box.innerHTML = html;
-}
-
-function copiarProtocolo() {
-  navigator.clipboard.writeText(state.protocolo).then(() => {
-    const btn = document.querySelector('.copy-btn');
-    btn.textContent = '✓ Copiado!';
-    setTimeout(() => btn.textContent = '📋 Copiar Protocolo', 2000);
-  });
-}
-
-function reiniciar() {
-  state = { step: 1, projeto: {}, designs: [], selectedDesign: null, chatHistory: [], refinamentoDone: false, protocolo: '' };
-  document.getElementById('pergunta').value = '';
-  document.getElementById('objetivo').value = '';
-  document.getElementById('tipo').value = '';
-  document.getElementById('hipotese').value = '';
-  document.getElementById('error-1').style.display = 'none';
-  document.getElementById('chat-container').innerHTML = '';
-  document.getElementById('refine-input-area').style.display = 'none';
-  document.getElementById('btn-row-3').style.display = 'none';
-  document.getElementById('protocol-output').innerHTML = '';
-  document.getElementById('btn-row-4').style.display = 'none';
-  setStep(1);
-  showSection(1);
-}
-</script>
-</body>
-</html>
