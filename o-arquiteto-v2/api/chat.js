@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
       return res.status(401).json({ error: 'Não autenticado.' });
     }
 
-    const { messages, system, max_tokens } = req.body || {};
+    const { messages, system, max_tokens, prefill } = req.body;
     if (!messages || !system) {
       return res.status(400).json({ error: 'Campos obrigatórios ausentes (system, messages).' });
     }
@@ -34,11 +34,13 @@ module.exports = async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: max_tokens || 1800,
-        system,
-        messages
-      })
+  model: 'claude-sonnet-4-20250514',
+  max_tokens: max_tokens || 1800,
+  system,
+  messages: prefill 
+    ? [...messages, { role: 'assistant', content: prefill }]
+    : messages,
+}),
     });
 
     const data = await response.json();
