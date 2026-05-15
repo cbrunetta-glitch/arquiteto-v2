@@ -567,8 +567,7 @@ function resetForms() {
 async function callIA(system, messages, maxTokens) {
   const res = await api(API.chat, {
     method: 'POST',
-    body: { system, messages, max_tokens: maxTokens || 4000,
-           prefill: '['
+    body: { system, messages, max_tokens: maxTokens || 4000, prefill: '[' }
   });
   return res.content?.[0]?.text || '';
 }
@@ -1206,3 +1205,4 @@ init();
 </script>
 </body>
 </html>
+fecha chave do body em callIA
