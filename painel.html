@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel da Professora — O Arquiteto</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+:root {
+  --bg-page: #f7f5f0; --bg-card: #ffffff; --bg-card-alt: #faf8f3; --bg-muted: #efece4;
+  --border: #d8d4ca; --border-strong: #b8b1a3; --border-soft: #e8e4da;
+  --text: #1a1612; --text-strong: #0c0a08; --text-muted: #6b6358; --text-soft: #8b8275;
+  --accent: #6b2c2c; --accent-dark: #4a1f1f; --accent-soft: #f5ebeb; --accent-line: #c9a3a3;
+  --success: #2d5f3f; --error: #8b2c1f;
+  --shadow-sm: 0 1px 2px rgba(42,37,32,.04); --shadow-md: 0 2px 12px rgba(42,37,32,.08); --shadow-lg: 0 8px 32px rgba(42,37,32,.12);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{font-family:'Crimson Pro',Georgia,serif;font-size:1.0625rem;line-height:1.65;color:var(--text);background:var(--bg-page);min-height:100vh;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font-family:'Inter',system-ui,sans-serif;font-size:.9375rem;color:inherit}
+button{cursor:pointer;border:none;background:none}
+button:disabled{cursor:not-allowed;opacity:.5}
+.hidden{display:none!important}
+
+/* Login */
+.auth-shell{max-width:420px;margin:4rem auto;padding:0 1.5rem 4rem}
+.auth-brand{text-align:center;margin-bottom:2.5rem}
+.auth-brand h1{font-family:'Crimson Pro',serif;font-size:2rem;font-weight:700;color:var(--text-strong);letter-spacing:-.02em}
+.auth-brand p{color:var(--text-muted);margin-top:.25rem;font-family:'Inter',sans-serif;font-size:.75rem;text-transform:uppercase;letter-spacing:.14em;font-weight:500}
+.auth-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:2rem;box-shadow:var(--shadow-sm)}
+
+/* App layout */
+.app-shell{max-width:1180px;margin:0 auto;padding:0 1.5rem 4rem}
+header.app-header{border-bottom:1px solid var(--border);padding:1.5rem 0 1.25rem;margin-bottom:2rem;display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand-title{font-family:'Crimson Pro',serif;font-size:1.875rem;font-weight:700;letter-spacing:-.015em;color:var(--text-strong)}
+.brand-subtitle{font-family:'Inter',sans-serif;font-size:.6875rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-muted);margin-top:.375rem;font-weight:500}
+
+/* Botões */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.625rem 1.125rem;border-radius:4px;font-weight:500;font-size:.875rem;line-height:1.2;transition:all .15s ease;border:1px solid transparent;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--accent-dark)}
+.btn-secondary{background:transparent;color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover:not(:disabled){background:var(--bg-muted)}
+.btn-ghost{background:transparent;color:var(--text-muted);padding:.5rem .75rem}
+.btn-ghost:hover:not(:disabled){color:var(--accent);background:var(--accent-soft)}
+.btn-danger{background:transparent;color:var(--error);border:1px solid #f0b8a8;font-size:.8125rem}
+.btn-danger:hover:not(:disabled){background:#fbeae6}
+.btn-lg{padding:.875rem 1.5rem;font-size:1rem}
+.btn-block{width:100%}
+.btn-sm{padding:.375rem .625rem;font-size:.75rem}
+
+/* Form */
+.form{display:flex;flex-direction:column;gap:1.5rem}
+.campo{display:flex;flex-direction:column;gap:.375rem}
+.campo label{font-family:'Inter',sans-serif;font-size:.8125rem;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.05em}
+.campo input{padding:.75rem .875rem;border:1px solid var(--border-strong);border-radius:4px;background:var(--bg-card);font-family:'Crimson Pro',Georgia,serif;font-size:1.0625rem;color:var(--text);width:100%}
+.campo input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.campo input.pin{font-family:'Inter',sans-serif;letter-spacing:.5em;text-align:center;font-size:1.5rem;font-weight:600}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:2rem}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:1.25rem;box-shadow:var(--shadow-sm)}
+.stat-label{font-family:'Inter',sans-serif;font-size:.6875rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);font-weight:600;margin-bottom:.5rem}
+.stat-value{font-family:'Crimson Pro',serif;font-size:2rem;font-weight:700;color:var(--text-strong);line-height:1}
+.stat-sub{font-family:'Inter',sans-serif;font-size:.75rem;color:var(--text-soft);margin-top:.25rem}
+
+/* Painéis lado a lado */
+.painel-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:1.5rem;align-items:start}
+@media (max-width:960px){.painel-grid{grid-template-columns:1fr}}
+
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-sm);overflow:hidden}
+.panel-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.panel-head h2{font-family:'Crimson Pro',serif;font-size:1.125rem;font-weight:600;color:var(--text-strong)}
+.panel-head .badge{font-family:'Inter',sans-serif;font-size:.75rem;color:var(--text-muted);background:var(--bg-muted);padding:.125rem .5rem;border-radius:10px;font-weight:600}
+.panel-body{max-height:680px;overflow-y:auto}
+
+/* Lista alunos */
+.busca-bar{padding:.625rem 1rem;border-bottom:1px solid var(--border)}
+.busca-bar input{width:100%;padding:.5rem .75rem;border:1px solid var(--border);border-radius:4px;background:var(--bg-card-alt);font-family:'Inter',sans-serif;font-size:.875rem}
+.busca-bar input:focus{outline:none;border-color:var(--accent);background:#fff}
+.aluno-item{padding:.875rem 1.125rem;border-bottom:1px solid var(--border-soft);cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:.25rem}
+.aluno-item:hover{background:var(--bg-card-alt)}
+.aluno-item.ativo{background:var(--accent-soft);border-left:3px solid var(--accent);padding-left:calc(1.125rem - 3px)}
+.aluno-nome{font-weight:600;color:var(--text-strong);font-size:1rem;font-family:'Crimson Pro',serif}
+.aluno-meta{font-family:'Inter',sans-serif;font-size:.75rem;color:var(--text-muted);display:flex;gap:.75rem;flex-wrap:wrap}
+.aluno-meta .pill{background:var(--bg-muted);padding:.0625rem .5rem;border-radius:10px;font-weight:600}
+.aluno-meta .pill.has-protocolo{background:#e0eee5;color:var(--success)}
+.empty{padding:2.5rem 1.5rem;text-align:center;color:var(--text-soft);font-style:italic}
+
+/* Detalhe aluno */
+.detalhe-aluno-head{padding:1.25rem 1.25rem 1rem;border-bottom:1px solid var(--border)}
+.detalhe-aluno-head h3{font-family:'Crimson Pro',serif;font-size:1.375rem;font-weight:600;color:var(--text-strong);margin-bottom:.375rem}
+.dados-aluno{font-family:'Inter',sans-serif;font-size:.8125rem;color:var(--text-muted);display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin-top:.5rem}
+.dados-aluno dt{font-weight:600;color:var(--text-soft);text-transform:uppercase;font-size:.6875rem;letter-spacing:.06em}
+.dados-aluno dd{color:var(--text)}
+
+/* Sessões do aluno */
+.sessao-bloco{border-bottom:1px solid var(--border)}
+.sessao-bloco:last-child{border-bottom:none}
+.sessao-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.875rem 1.25rem;cursor:pointer;transition:background .15s}
+.sessao-head:hover{background:var(--bg-card-alt)}
+.sessao-head.aberto{background:var(--bg-card-alt)}
+.sessao-head-info{flex:1;min-width:0}
+.sessao-head-titulo{font-family:'Crimson Pro',serif;font-size:1.0625rem;font-weight:600;color:var(--text-strong);margin-bottom:.125rem;line-height:1.3}
+.sessao-head-meta{font-family:'Inter',sans-serif;font-size:.75rem;color:var(--text-muted);display:flex;gap:.625rem;flex-wrap:wrap;align-items:center}
+.sessao-head-actions{display:flex;gap:.25rem;flex-shrink:0}
+.chevron{transition:transform .2s;color:var(--text-soft)}
+.chevron.aberto{transform:rotate(90deg)}
+.sessao-conteudo{padding:1.25rem 1.5rem 1.5rem;background:#fcfaf5;border-top:1px solid var(--border-soft)}
+
+.bloco-conteudo{margin-bottom:1.5rem}
+.bloco-conteudo:last-child{margin-bottom:0}
+.bloco-conteudo h4{font-family:'Inter',sans-serif;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:.625rem;padding-bottom:.375rem;border-bottom:1px solid var(--accent-line)}
+.kv-list{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem;font-size:.9375rem}
+.kv-list dt{font-family:'Inter',sans-serif;font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.kv-list dd{color:var(--text);line-height:1.5}
+.design-resumo{padding:.875rem 1rem;background:var(--bg-card);border:1px solid var(--border-soft);border-radius:4px}
+.design-resumo-tag{display:inline-block;font-family:'Inter',sans-serif;font-size:.6875rem;font-weight:700;letter-spacing:.1em;color:var(--accent);background:var(--accent-soft);padding:.125rem .5rem;border-radius:3px;margin-bottom:.375rem}
+.design-resumo-nome{font-family:'Crimson Pro',serif;font-weight:600;color:var(--text-strong);margin-bottom:.5rem}
+.dialogo-msg{display:flex;flex-direction:column;gap:.25rem;margin-bottom:.875rem}
+.dialogo-msg-label{font-family:'Inter',sans-serif;font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted)}
+.dialogo-msg-content{padding:.75rem .875rem;border-radius:4px;font-size:.9375rem;line-height:1.55;white-space:pre-wrap;word-wrap:break-word;background:var(--bg-card);border:1px solid var(--border-soft)}
+.dialogo-msg.assistant .dialogo-msg-label{color:var(--accent)}
+.dialogo-msg.assistant .dialogo-msg-content{border-left:3px solid var(--accent)}
+.protocolo-box{background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:1.125rem 1.25rem;font-size:.9375rem;line-height:1.65;white-space:pre-wrap}
+
+/* Loading & Toast */
+.loading{position:fixed;inset:0;background:rgba(247,245,240,.85);backdrop-filter:blur(2px);z-index:200;display:flex;align-items:center;justify-content:center}
+.loading-content{background:var(--bg-card);padding:2rem 3rem;border-radius:6px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;align-items:center;gap:1.25rem;max-width:320px;text-align:center}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading p{font-family:'Inter',sans-serif;font-size:.875rem;color:var(--text-muted)}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text-strong);color:#fff;padding:.75rem 1.25rem;border-radius:4px;font-family:'Inter',sans-serif;font-size:.875rem;z-index:300;box-shadow:var(--shadow-md);max-width:90vw}
+.toast.error{background:var(--error)}
+.toast.success{background:var(--success)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.tag-pill{display:inline-block;font-family:'Inter',sans-serif;font-size:.6875rem;font-weight:700;letter-spacing:.08em;background:var(--bg-muted);color:var(--text);padding:.125rem .5rem;border-radius:3px;margin-right:.25rem;margin-bottom:.25rem}
+
+.ranking-list{font-family:'Inter',sans-serif;font-size:.875rem}
+.ranking-row{display:flex;justify-content:space-between;align-items:center;padding:.375rem 0;border-bottom:1px solid var(--border-soft)}
+.ranking-row:last-child{border-bottom:none}
+.ranking-row .tag{font-weight:600;color:var(--text)}
+.ranking-row .num{color:var(--accent);font-weight:700}
+
+@media (max-width:640px){
+  .app-shell{padding:0 1rem 3rem}
+  .brand-title{font-size:1.5rem}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="telaLogin" class="auth-shell">
+  <div class="auth-brand">
+    <h1>Painel da Professora</h1>
+    <p>O Arquiteto · FADISP</p>
+  </div>
+  <div class="auth-card">
+    <form id="formLoginPainel" class="form">
+      <div class="campo">
+        <label for="painelPin">Senha (4 dígitos)</label>
+        <input id="painelPin" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" class="pin" required autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg btn-block">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ PAINEL ============ -->
+<div id="telaPainel" class="hidden">
+<div class="app-shell">
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-title">Painel da Professora</span>
+      <span class="brand-subtitle">O Arquiteto · Seminário de Pesquisa · FADISP</span>
+    </div>
+    <div>
+      <button class="btn btn-secondary" id="btnRecarregar">Recarregar dados</button>
+      <button class="btn btn-ghost" id="btnSair">Sair</button>
+    </div>
+  </header>
+
+  <!-- Estatísticas -->
+  <section class="stats-grid" id="statsGrid"></section>
+
+  <!-- Layout principal -->
+  <div class="painel-grid">
+
+    <!-- Coluna esquerda: lista + rankings -->
+    <div>
+      <div class="panel" style="margin-bottom:1.25rem">
+        <div class="panel-head">
+          <h2>Alunos</h2>
+          <span class="badge" id="badgeAlunos">0</span>
+        </div>
+        <div class="busca-bar">
+          <input id="buscaAluno" type="text" placeholder="Buscar por nome, email ou CPF...">
+        </div>
+        <div class="panel-body" id="listaAlunos"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:1.25rem">
+        <div class="panel-head"><h2>Designs mais escolhidos</h2></div>
+        <div class="panel-body" style="padding:.75rem 1.25rem">
+          <div class="ranking-list" id="rankingDesigns"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Tipos de pesquisa</h2></div>
+        <div class="panel-body" style="padding:.75rem 1.25rem">
+          <div class="ranking-list" id="rankingTipos"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coluna direita: detalhe -->
+    <div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="detalheHeader">Selecione um aluno</h2>
+        </div>
+        <div id="detalheCorpo">
+          <div class="empty">Clique em um aluno à esquerda para ver suas sessões.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="loading hidden" id="loading"><div class="loading-content"><div class="spinner"></div><p id="loadingMsg">Carregando...</p></div></div>
+<div class="toast hidden" id="toast"></div>
+
+<script>
+'use strict';
+
+const API = {
+  login: '/api/painel-login',
+  dados: '/api/painel-dados',
+  excluirSessao: '/api/painel-excluir-sessao'
+};
+const TOKEN_KEY = 'arquiteto_painel_token_v1';
+
+let token = null;
+let dados = null;        // { alunos, estatisticas }
+let alunoSelecionado = null;
+let sessaoExpandida = null;
+
+// ========== FETCH ==========
+async function api(url, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (opts.body && typeof opts.body !== 'string') {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  const res = await fetch(url, opts);
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    if (res.status === 401) { logout(true); throw new Error('Sessão expirada. Faça login novamente.'); }
+    throw new Error((data && data.error) || `Erro ${res.status}`);
+  }
+  return data;
+}
+
+// ========== LOGIN ==========
+async function login(pin) {
+  const data = await api(API.login, { method: 'POST', body: { pin } });
+  token = data.token;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+function logout(silent) {
+  token = null;
+  localStorage.removeItem(TOKEN_KEY);
+  document.getElementById('telaPainel').classList.add('hidden');
+  document.getElementById('telaLogin').classList.remove('hidden');
+  document.getElementById('painelPin').value = '';
+  if (!silent) toast('Sessão encerrada.');
+}
+
+async function carregarDados() {
+  setLoading(true, 'Carregando dados das sessões...');
+  try {
+    dados = await api(API.dados);
+    renderEstatisticas();
+    renderListaAlunos();
+    renderRankings();
+    if (alunoSelecionado) {
+      const ainda = dados.alunos.find(a => a.cpfHash === alunoSelecionado.cpfHash);
+      if (ainda) { alunoSelecionado = ainda; renderDetalheAluno(); }
+      else { alunoSelecionado = null; document.getElementById('detalheCorpo').innerHTML = '<div class="empty">Aluno não encontrado.</div>'; document.getElementById('detalheHeader').textContent = 'Selecione um aluno'; }
+    }
+  } catch (err) { toast(err.message, 'error'); }
+  finally { setLoading(false); }
+}
+
+// ========== RENDER ==========
+function renderEstatisticas() {
+  const e = dados.estatisticas;
+  const grid = document.getElementById('statsGrid');
+  const totalSess = e.totalSessoes || 0;
+  const compl = e.sessoesCompletas || 0;
+  const pct = totalSess ? Math.round(100 * compl / totalSess) : 0;
+  const dist = e.distribuicaoEtapas || {};
+  grid.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Alunos cadastrados</div>
+      <div class="stat-value">${e.totalAlunos || 0}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Sessões iniciadas</div>
+      <div class="stat-value">${totalSess}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Protocolos finalizados</div>
+      <div class="stat-value">${compl}</div>
+      <div class="stat-sub">${pct}% das sessões</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Sessões por etapa</div>
+      <div style="display:flex;gap:.625rem;margin-top:.375rem;flex-wrap:wrap;font-family:'Inter',sans-serif;font-size:.8125rem">
+        <span><strong style="font-size:1rem">${dist[1]||0}</strong> · Projeto</span>
+        <span><strong style="font-size:1rem">${dist[2]||0}</strong> · Designs</span>
+        <span><strong style="font-size:1rem">${dist[3]||0}</strong> · Refino</span>
+        <span><strong style="font-size:1rem">${dist[4]||0}</strong> · Pronto</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderListaAlunos() {
+  const lista = document.getElementById('listaAlunos');
+  const busca = document.getElementById('buscaAluno').value.trim().toLowerCase();
+  document.getElementById('badgeAlunos').textContent = dados.alunos.length;
+
+  const filtrados = dados.alunos.filter(a => {
+    if (!busca) return true;
+    return (a.nome && a.nome.toLowerCase().includes(busca)) ||
+           (a.email && a.email.toLowerCase().includes(busca)) ||
+           (a.cpf && a.cpf.replace(/\D/g,'').includes(busca.replace(/\D/g,'')));
+  });
+
+  if (!filtrados.length) {
+    lista.innerHTML = '<div class="empty">Nenhum aluno encontrado.</div>';
+    return;
+  }
+  lista.innerHTML = '';
+  filtrados.forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'aluno-item';
+    if (alunoSelecionado && alunoSelecionado.cpfHash === a.cpfHash) item.classList.add('ativo');
+    const ultAcesso = a.ultimoAcesso ? new Date(a.ultimoAcesso).toLocaleDateString('pt-BR') : '—';
+    const completas = a.sessoes.filter(s => s.protocoloFinal).length;
+    item.innerHTML = `
+      <div class="aluno-nome">${escapeHTML(a.nome)}</div>
+      <div class="aluno-meta">
+        <span>${escapeHTML(a.email)}</span>
+        <span class="pill ${completas?'has-protocolo':''}">${a.sessoes.length} sessão${a.sessoes.length===1?'':'ões'}${completas?` · ${completas} completa${completas===1?'':'s'}`:''}</span>
+        <span>Último acesso: ${ultAcesso}</span>
+      </div>
+    `;
+    item.addEventListener('click', () => {
+      alunoSelecionado = a;
+      sessaoExpandida = null;
+      renderListaAlunos();
+      renderDetalheAluno();
+    });
+    lista.appendChild(item);
+  });
+}
+
+function renderRankings() {
+  const e = dados.estatisticas;
+  const elDesigns = document.getElementById('rankingDesigns');
+  if (!e.designsMaisEscolhidos.length) elDesigns.innerHTML = '<div style="padding:.75rem 0;color:var(--text-soft);font-style:italic">Sem dados ainda.</div>';
+  else elDesigns.innerHTML = e.designsMaisEscolhidos.slice(0,8).map(r => `<div class="ranking-row"><span class="tag">${escapeHTML(r.tag)}</span><span class="num">${r.n}</span></div>`).join('');
+
+  const elTipos = document.getElementById('rankingTipos');
+  if (!e.tiposDePesquisa.length) elTipos.innerHTML = '<div style="padding:.75rem 0;color:var(--text-soft);font-style:italic">Sem dados ainda.</div>';
+  else elTipos.innerHTML = e.tiposDePesquisa.map(r => `<div class="ranking-row"><span class="tag">${escapeHTML(r.tipo)}</span><span class="num">${r.n}</span></div>`).join('');
+}
+
+function renderDetalheAluno() {
+  const a = alunoSelecionado;
+  document.getElementById('detalheHeader').textContent = a.nome;
+  const corpo = document.getElementById('detalheCorpo');
+
+  const consent = a.consentimentoEm ? new Date(a.consentimentoEm).toLocaleString('pt-BR') : '—';
+  const criado = a.criadoEm ? new Date(a.criadoEm).toLocaleString('pt-BR') : '—';
+  const ultimo = a.ultimoAcesso ? new Date(a.ultimoAcesso).toLocaleString('pt-BR') : '—';
+
+  let html = `
+    <div class="detalhe-aluno-head">
+      <h3>${escapeHTML(a.nome)}</h3>
+      <dl class="dados-aluno">
+        <dt>CPF</dt><dd>${escapeHTML(a.cpf || '—')}</dd>
+        <dt>Email</dt><dd>${escapeHTML(a.email)}</dd>
+        <dt>Cadastro</dt><dd>${criado}</dd>
+        <dt>Consentimento LGPD</dt><dd>${consent}</dd>
+        <dt>Último acesso</dt><dd>${ultimo}</dd>
+        <dt>Sessões</dt><dd>${a.sessoes.length} (${a.sessoes.filter(s=>s.protocoloFinal).length} com protocolo)</dd>
+      </dl>
+    </div>
+  `;
+
+  if (!a.sessoes.length) {
+    html += '<div class="empty">Este aluno ainda não criou nenhuma sessão.</div>';
+  } else {
+    a.sessoes.forEach(s => {
+      const dt = s.updatedAt ? new Date(s.updatedAt).toLocaleString('pt-BR') : '—';
+      const tipoP = s.projeto && s.projeto.tipo ? s.projeto.tipo : '—';
+      const aberto = sessaoExpandida === s.id;
+      const statusPill = s.protocoloFinal
+        ? '<span style="background:#e0eee5;color:var(--success);padding:.0625rem .5rem;border-radius:10px;font-weight:600">protocolo ✓</span>'
+        : `<span style="background:var(--bg-muted);padding:.0625rem .5rem;border-radius:10px;font-weight:600">etapa ${s.etapaAtual || 1}</span>`;
+
+      html += `
+        <div class="sessao-bloco">
+          <div class="sessao-head ${aberto?'aberto':''}" data-toggle="${s.id}">
+            <div class="sessao-head-info">
+              <div class="sessao-head-titulo">${escapeHTML(s.title || 'Sessão sem título')}</div>
+              <div class="sessao-head-meta">
+                ${statusPill}
+                <span>${escapeHTML(tipoP)}</span>
+                <span>${dt}</span>
+              </div>
+            </div>
+            <div class="sessao-head-actions" data-stop="1">
+              <button class="btn btn-secondary btn-sm" data-pdf="${s.id}">PDF</button>
+              <button class="btn btn-danger btn-sm" data-excluir="${s.id}">Excluir</button>
+              <span class="chevron ${aberto?'aberto':''}">›</span>
+            </div>
+          </div>
+      `;
+
+      if (aberto) {
+        html += '<div class="sessao-conteudo">';
+        // Projeto
+        if (s.projeto) {
+          html += `<div class="bloco-conteudo"><h4>Projeto</h4><dl class="kv-list">
+            ${kv('Pergunta', s.projeto.pergunta)}
+            ${kv('Objetivo', s.projeto.objetivo)}
+            ${kv('Tipo', s.projeto.tipo)}
+            ${s.projeto.hipotese ? kv('Hipótese', s.projeto.hipotese) : ''}
+          </dl></div>`;
+        }
+        // Design escolhido
+        if (s.designEscolhido) {
+          const d = s.designEscolhido;
+          html += `<div class="bloco-conteudo"><h4>Design escolhido</h4>
+            <div class="design-resumo">
+              <span class="design-resumo-tag">${escapeHTML(d.tag)}</span>
+              <div class="design-resumo-nome">${escapeHTML(d.nome)}</div>
+              <div style="font-size:.9375rem;color:var(--text);margin-bottom:.75rem">${escapeHTML(d.descricao||'')}</div>
+              <dl class="kv-list">
+                ${kv('Abordagem', d.abordagem)}
+                ${kv('Técnica', d.tecnica)}
+                ${kv('Fontes', d.fontes)}
+                ${kv('Análise', d.analise)}
+                ${kv('Exige', d.exigencias)}
+                ${kv('Desafio', d.desafio)}
+              </dl>
+            </div>
+          </div>`;
+        }
+        // Designs propostos (todos)
+        if (s.designs && s.designs.length) {
+          html += `<div class="bloco-conteudo"><h4>Designs propostos (${s.designs.length})</h4>`;
+          s.designs.forEach(d => {
+            html += `<div style="margin-bottom:.5rem">${tagPill(d.tag)}<span style="font-family:'Crimson Pro',serif;color:var(--text-strong)">${escapeHTML(d.nome)}</span></div>`;
+          });
+          html += '</div>';
+        }
+        // Refinamento
+        if (s.refinamento && s.refinamento.messages && s.refinamento.messages.length) {
+          html += '<div class="bloco-conteudo"><h4>Diálogo de refinamento</h4>';
+          s.refinamento.messages
+            .filter(m => m.content !== 'Por favor, inicie o refinamento com a primeira pergunta operacional.')
+            .forEach(m => {
+              let c = m.content;
+              if (m.role === 'assistant') c = c.replace(/REFINAMENTO_CONCLU[ÍI]DO\s*/g, '');
+              html += `<div class="dialogo-msg ${m.role}">
+                <div class="dialogo-msg-label">${m.role === 'user' ? a.nome.split(' ')[0] : 'Arquiteto'}</div>
+                <div class="dialogo-msg-content">${escapeHTML(c.trim())}</div>
+              </div>`;
+            });
+          if (s.refinamento.sintese) {
+            html += `<div class="dialogo-msg assistant"><div class="dialogo-msg-label">Síntese final</div><div class="dialogo-msg-content">${escapeHTML(s.refinamento.sintese)}</div></div>`;
+          }
+          html += '</div>';
+        }
+        // Protocolo
+        if (s.protocoloFinal) {
+          html += `<div class="bloco-conteudo"><h4>Protocolo metodológico</h4><div class="protocolo-box">${escapeHTML(s.protocoloFinal)}</div></div>`;
+        }
+        // Continuação
+        if (s.continuacao && s.continuacao.length) {
+          html += '<div class="bloco-conteudo"><h4>Diálogo de continuação</h4>';
+          s.continuacao.forEach(m => {
+            html += `<div class="dialogo-msg ${m.role}">
+              <div class="dialogo-msg-label">${m.role === 'user' ? a.nome.split(' ')[0] : 'Arquiteto'}</div>
+              <div class="dialogo-msg-content">${escapeHTML(m.content)}</div>
+            </div>`;
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  corpo.innerHTML = html;
+
+  // Eventos: expand/collapse
+  corpo.querySelectorAll('[data-toggle]').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('[data-stop]') && !e.target.matches('.chevron')) return;
+      const id = el.dataset.toggle;
+      sessaoExpandida = sessaoExpandida === id ? null : id;
+      renderDetalheAluno();
+    });
+  });
+  corpo.querySelectorAll('[data-pdf]').forEach(b => {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = b.dataset.pdf;
+      const s = a.sessoes.find(x => x.id === id);
+      if (s) exportarPDF(s, a);
+    });
+  });
+  corpo.querySelectorAll('[data-excluir]').forEach(b => {
+    b.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id = b.dataset.excluir;
+      const s = a.sessoes.find(x => x.id === id);
+      if (!s) return;
+      if (!confirm(`Excluir a sessão "${s.title || 'sem título'}"? Esta ação não pode ser desfeita.`)) return;
+      setLoading(true, 'Excluindo sessão...');
+      try {
+        await api(API.excluirSessao, { method: 'POST', body: { sessionId: id } });
+        toast('Sessão excluída.', 'success');
+        await carregarDados();
+      } catch (err) { toast(err.message, 'error'); }
+      finally { setLoading(false); }
+    });
+  });
+}
+
+function kv(label, value) {
+  if (!value) return '';
+  return `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
+}
+function tagPill(tag) {
+  return `<span class="tag-pill">${escapeHTML(tag || '—')}</span>`;
+}
+
+// ========== PDF ==========
+function exportarPDF(s, aluno) {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const margin = 22;
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const contentW = pageW - 2 * margin;
+    let y = margin;
+
+    function check(n) { if (y + n > pageH - margin - 10) { addFooter(); doc.addPage(); y = margin; } }
+    function addFooter() {
+      const p = doc.internal.getCurrentPageInfo().pageNumber;
+      doc.setFont('times', 'italic'); doc.setFontSize(9); doc.setTextColor(120);
+      doc.text(`O Arquiteto — ${s.title || 'Sessão'} — pág. ${p}`, pageW/2, pageH-12, { align: 'center' });
+      doc.setTextColor(0);
+    }
+    function title(t) { check(16); doc.setFont('times','bold'); doc.setFontSize(18); doc.setTextColor(40); doc.splitTextToSize(t, contentW).forEach(l=>{doc.text(l,margin,y);y+=8;}); doc.setTextColor(0); y+=3; }
+    function heading(t) { check(14); y+=4; doc.setFont('times','bold'); doc.setFontSize(13); doc.setTextColor(107,44,44); doc.text(t,margin,y); doc.setTextColor(0); y+=6; doc.setDrawColor(200); doc.line(margin,y-4,margin+30,y-4); }
+    function paragraph(t,opts){ if(!t) return; opts=opts||{}; doc.setFont('times', opts.italic?'italic':'normal'); doc.setFontSize(opts.size||11); doc.splitTextToSize(t, contentW).forEach(l=>{check(6); doc.text(l,margin,y); y+=5.5;}); y+=2; }
+    function label(l,t){ if(!t) return; check(10); doc.setFont('times','bold'); doc.setFontSize(10); doc.text(l.toUpperCase(),margin,y); y+=4.5; paragraph(t); }
+
+    title('Protocolo Metodológico Provisório');
+    doc.setFont('times','italic'); doc.setFontSize(10); doc.setTextColor(110);
+    const data = s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '';
+    doc.text(`${aluno.nome} · ${data} · Seminário de Pesquisa / FADISP`, margin, y);
+    doc.setTextColor(0); y+=8;
+
+    if (s.projeto) {
+      heading('1. Projeto de pesquisa');
+      label('Pergunta', s.projeto.pergunta);
+      label('Objetivo geral', s.projeto.objetivo);
+      label('Tipo de pesquisa', s.projeto.tipo);
+      if (s.projeto.hipotese) label('Hipótese provisória', s.projeto.hipotese);
+    }
+
+    if (s.designEscolhido) {
+      heading('2. Design metodológico escolhido');
+      paragraph(`${s.designEscolhido.nome} (${s.designEscolhido.tag})`);
+      paragraph(s.designEscolhido.descricao);
+      label('Abordagem', s.designEscolhido.abordagem);
+      label('Técnica', s.designEscolhido.tecnica);
+      label('Fontes', s.designEscolhido.fontes);
+      label('Análise', s.designEscolhido.analise);
+      label('Exige', s.designEscolhido.exigencias);
+      label('Desafio central', s.designEscolhido.desafio);
+    }
+
+    if (s.refinamento && s.refinamento.messages && s.refinamento.messages.length > 1) {
+      heading('3. Diálogo de refinamento');
+      s.refinamento.messages
+        .filter(m => m.content !== 'Por favor, inicie o refinamento com a primeira pergunta operacional.')
+        .forEach(m => {
+          let c = m.content.replace(/REFINAMENTO_CONCLU[ÍI]DO\s*/g, '').trim();
+          if (c) label(m.role === 'user' ? 'Pesquisador' : 'Arquiteto', c);
+        });
+    }
+    if (s.protocoloFinal) { heading('4. Protocolo metodológico'); paragraph(s.protocoloFinal); }
+    if (s.continuacao && s.continuacao.length) {
+      heading('5. Diálogo de continuação');
+      s.continuacao.forEach(m => label(m.role === 'user' ? 'Pesquisador' : 'Arquiteto', m.content));
+    }
+    addFooter();
+    const safe = (s.title || 'sessao').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,40);
+    const safeNome = aluno.nome.replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,30);
+    doc.save(`protocolo-${safeNome}-${safe}.pdf`);
+    toast('PDF gerado.', 'success');
+  } catch (err) { toast('Erro PDF: ' + err.message, 'error'); }
+}
+
+// ========== UI ==========
+function setLoading(on, msg) {
+  const el = document.getElementById('loading');
+  if (on) { document.getElementById('loadingMsg').textContent = msg || 'Processando...'; el.classList.remove('hidden'); }
+  else el.classList.add('hidden');
+}
+let toastT;
+function toast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (kind ? ' ' + kind : '');
+  t.classList.remove('hidden');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.add('hidden'), 4000);
+}
+function escapeHTML(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ========== INIT ==========
+function bindEvents() {
+  document.querySelectorAll('input.pin').forEach(inp => {
+    inp.addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0,4); });
+  });
+
+  document.getElementById('formLoginPainel').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pin = document.getElementById('painelPin').value;
+    setLoading(true, 'Validando...');
+    try {
+      await login(pin);
+      setLoading(false);
+      document.getElementById('telaLogin').classList.add('hidden');
+      document.getElementById('telaPainel').classList.remove('hidden');
+      await carregarDados();
+    } catch (err) {
+      setLoading(false);
+      document.getElementById('painelPin').value = '';
+      toast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('btnSair').addEventListener('click', () => logout());
+  document.getElementById('btnRecarregar').addEventListener('click', carregarDados);
+  document.getElementById('buscaAluno').addEventListener('input', renderListaAlunos);
+}
+
+async function init() {
+  bindEvents();
+  const saved = localStorage.getItem(TOKEN_KEY);
+  if (saved) {
+    token = saved;
+    try {
+      // Tenta carregar — se token inválido, vai cair para login
+      await carregarDados();
+      document.getElementById('telaLogin').classList.add('hidden');
+      document.getElementById('telaPainel').classList.remove('hidden');
+    } catch {
+      token = null;
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
