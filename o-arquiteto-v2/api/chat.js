@@ -41,7 +41,6 @@ module.exports = async function handler(req, res) {
     ? [...messages, { role: 'assistant', content: prefill }]
     : messages,
 }),
-    });
 
     const data = await response.json();
     if (!response.ok) {
