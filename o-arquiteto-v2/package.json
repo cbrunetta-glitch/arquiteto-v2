@@ -1,0 +1,8 @@
+{
+  "name": "arquiteto-v4",
+  "version": "4.0.0",
+  "private": true,
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}
