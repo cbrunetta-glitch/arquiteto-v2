@@ -467,7 +467,7 @@ function renderDetalheAluno() {
               <div class="design-resumo-nome">${escapeHTML(d.nome)}</div>
               <div style="font-size:.9375rem;color:var(--text);margin-bottom:.75rem">${escapeHTML(d.descricao||'')}</div>
               <dl class="kv-list">
-                ${kv('Abordagem', d.abordagem)}
+                ${kv('Família metodológica', d.familia || d.abordagem || '—')}
                 ${kv('Técnica', d.tecnica)}
                 ${kv('Fontes', d.fontes)}
                 ${kv('Análise', d.analise)}
@@ -610,7 +610,7 @@ function exportarPDF(s, aluno) {
       heading('2. Design metodológico escolhido');
       paragraph(`${s.designEscolhido.nome} (${s.designEscolhido.tag})`);
       paragraph(s.designEscolhido.descricao);
-      label('Abordagem', s.designEscolhido.abordagem);
+      label('Família metodológica', s.designEscolhido.familia || s.designEscolhido.abordagem || '—');
       label('Técnica', s.designEscolhido.tecnica);
       label('Fontes', s.designEscolhido.fontes);
       label('Análise', s.designEscolhido.analise);

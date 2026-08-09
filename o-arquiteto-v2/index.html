@@ -564,52 +564,116 @@ function resetForms() {
 }
 
 // ========== CHAT API ==========
-async function callIA(system, messages, maxTokens) {
+async function callIA(system, messages, maxTokens, outputConfig) {
   const res = await api(API.chat, {
     method: 'POST',
-    body: { system, messages, max_tokens: maxTokens || 5000 }
+    body: {
+      system,
+      messages,
+      max_tokens: maxTokens || 8000,
+      ...(outputConfig ? { output_config: outputConfig } : {})
+    }
   });
-  return res.content?.[0]?.text || '';
+
+  // O modelo raciocina antes de responder, então content[0] pode ser um bloco de
+  // raciocínio, não o texto. Pegar sempre o primeiro bloco de texto de verdade.
+  const bloco = (res.content || []).find(b => b.type === 'text');
+  const texto = bloco?.text || '';
+
+  // Antes isto era descartado em silêncio: a resposta vinha cortada, o JSON quebrava,
+  // e o aluno via um erro de parsing que não dizia nada sobre a causa real.
+  if (res.stop_reason === 'max_tokens') {
+    throw new Error('A resposta foi cortada porque ficou longa demais. Tente de novo — se repetir, avise a professora.');
+  }
+  if (res.stop_reason === 'refusal') {
+    throw new Error('O sistema não conseguiu responder a este pedido. Revise o texto do projeto e tente de novo.');
+  }
+  if (!texto) {
+    throw new Error('O sistema devolveu uma resposta vazia. Tente novamente.');
+  }
+
+  return texto;
 }
+
+// Esquema entregue à API: ela passa a garantir JSON válido com estes campos, em vez
+// de o modelo "tentar" produzir JSON e o navegador torcer para dar certo.
+const CAMPOS_DESIGN = ['tag','nome','descricao','familia','tecnica','fontes','analise','exigencias','desafio'];
+
+const SCHEMA_DESIGNS = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['designs'],
+  properties: {
+    designs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: CAMPOS_DESIGN,
+        properties: Object.fromEntries(CAMPOS_DESIGN.map(c => [c, { type: 'string' }]))
+      }
+    }
+  }
+};
 
 function parseDesignsJSON(rawText) {
   let clean = rawText.trim();
   clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-  const start = clean.indexOf('[');
-  const end = clean.lastIndexOf(']');
-  if (start !== -1 && end !== -1) clean = clean.substring(start, end + 1);
-  return JSON.parse(clean);
+  const abre = clean.search(/[[{]/);
+  if (abre > 0) clean = clean.slice(abre);
+  const dados = JSON.parse(clean);
+  // Aceita tanto {designs:[...]} (formato novo) quanto [...] (sessões antigas salvas).
+  const lista = Array.isArray(dados) ? dados : dados.designs;
+  if (!Array.isArray(lista) || !lista.length) {
+    throw new Error('A resposta não trouxe nenhum design.');
+  }
+  return lista;
 }
 
 // ========== SYSTEM PROMPTS ==========
+
+// O princípio aparece em todos os prompts. A versão anterior equiparava rigor a
+// dificuldade, e o modelo lia "difícil" como empírico e "fácil" como dogmático —
+// era daí que vinha o puxão para a pesquisa empírica.
+const PRINCIPIO = `Princípio fundamental: o método deve emergir da pergunta de pesquisa e dos objetivos — nunca das conveniências institucionais ou profissionais do pesquisador. Isso vale nos dois sentidos: não se escolhe um método por ser cômodo, mas também não se escolhe um por parecer mais trabalhoso ou mais "científico". Pesquisa empírica não é mais rigorosa que pesquisa dogmática — rigor é adequação entre pergunta, método e execução. Se o método mais adequado for difícil de executar, diga isso claramente e diga o que ele exige. Se o mais adequado for também o mais acessível, diga isso sem constrangimento.`;
+
+const PRINCIPIO_CURTO = `Princípio: o método serve à pergunta — não ao pesquisador, e não à aparência de rigor. Dificuldade não é sinal de qualidade metodológica, nem facilidade é motivo de suspeita. O que vale é a adequação entre pergunta, método e execução.`;
+
+// Sessões salvas antes desta versão guardam o campo como "abordagem".
+function familiaDe(d) {
+  return (d && (d.familia || d.abordagem)) || '—';
+}
 function promptGeracaoDesigns() {
   return `Você é O Arquiteto — um consultor especializado em design metodológico para pesquisa jurídica em doutorado. Você é rigoroso, preciso e jamais genérico.
 
-Princípio fundamental: o método deve emergir da pergunta de pesquisa e dos objetivos — nunca das conveniências institucionais ou profissionais do pesquisador. Se o método mais adequado for difícil de executar, diga isso claramente. O papel do pesquisador é encontrar um modo de fazê-lo — ou rever o escopo da pesquisa. Facilidade não é critério metodológico.
+${PRINCIPIO}
 
-Sua tarefa é propor exatamente 3 designs metodológicos distintos e adequados para a pesquisa descrita. Eles devem ser genuinamente diferentes — não variações do mesmo método.
+As famílias metodológicas abaixo são todas legítimas e estão em pé de igualdade. Nenhuma é mais científica que outra:
+dogmática jurídica · análise jurisprudencial/decisória · direito comparado · história do direito · teoria e filosofia do direito · análise econômica do direito · análise legislativa · pesquisa sociojurídica empírica
+
+Sua tarefa é propor exatamente 3 designs metodológicos adequados à pesquisa descrita. Eles devem ser alternativas genuinamente viáveis para esta pergunta. Podem pertencer à mesma família metodológica, se é ali que estão as respostas adequadas — nesse caso devem diferir em técnica, fontes ou recorte. Variedade de famílias não é um objetivo em si: não invente uma alternativa empírica para uma pergunta que não a pede.
 
 Para cada design, produza um JSON com este formato exato:
 {
   "tag": "nome curto em maiúsculas (ex: DOGMÁTICO-ANALÍTICO)",
   "nome": "nome completo do design metodológico",
   "descricao": "2-3 frases explicando por que este design é adequado à pergunta e aos objetivos — com ancoragem direta na pergunta formulada",
-  "abordagem": "abordagem de pesquisa (qualitativa / quantitativa / misto)",
-  "tecnica": "técnica(s) de coleta de dados específica(s)",
+  "familia": "a família metodológica a que este design pertence",
+  "tecnica": "técnica(s) de investigação específica(s)",
   "fontes": "tipos de fontes que serão utilizadas",
-  "analise": "como os dados/fontes serão analisados",
+  "analise": "como as fontes serão analisadas",
   "exigencias": "o que este design exige do pesquisador: competências, tempo, acesso a fontes, recursos",
   "desafio": "o principal obstáculo metodológico que o pesquisador precisará superar para executar este design com rigor científico"
 }
 
-Responda APENAS com um array JSON com exatamente 3 objetos. Nada mais. Sem markdown, sem backticks, sem explicações fora do JSON.`;
+Devolva os 3 designs no campo "designs".`;
 }
 
 function promptRefinamento(s) {
   const d = s.designEscolhido;
   return `Você é O Arquiteto — um consultor exigente de design metodológico jurídico. O pesquisador escolheu um design e agora você vai refiná-lo através de um diálogo.
 
-Princípio fundamental: o método serve à pergunta — não ao pesquisador. Se uma escolha metodológica for difícil mas necessária, diga isso. Facilidade não é critério.
+${PRINCIPIO_CURTO}
 
 Seu protocolo:
 1. Faça UMA pergunta de refinamento por rodada — nunca mais de uma.
@@ -625,7 +689,7 @@ Contexto da pesquisa:
 - Hipótese: ${s.projeto.hipotese || 'não informada'}
 
 Design escolhido: ${d.nome} (${d.tag})
-- Abordagem: ${d.abordagem}
+- Família metodológica: ${familiaDe(d)}
 - Técnica: ${d.tecnica}
 - Fontes: ${d.fontes}
 - Análise: ${d.analise}
@@ -639,12 +703,14 @@ function promptProtocolo() {
 
 Estrutura obrigatória, com rótulos em maiúsculas:
 ABORDAGEM METODOLÓGICA:
-TÉCNICA(S) DE COLETA:
+TÉCNICA(S) DE INVESTIGAÇÃO:
 FONTES DA PESQUISA:
 MÉTODO DE ANÁLISE:
-RECORTE TEMPORAL E ESPACIAL:
+RECORTE (temporal, espacial e material):
 LIMITAÇÕES RECONHECIDAS:
 PRÓXIMOS PASSOS OPERACIONAIS:
+
+No RECORTE, preencha apenas as dimensões que fazem sentido para este design. Em pesquisa dogmática, jurisprudencial ou teórica, o recorte material — quais normas, qual doutrina, quais tribunais, quais decisões — costuma ser o que de fato delimita a pesquisa; não force um recorte espacial que não tenha função.
 
 Linguagem acadêmica direta. Máximo 400 palavras. Sem introdução ou conclusão.`;
 }
@@ -653,7 +719,9 @@ function promptContinuacao(s) {
   const d = s.designEscolhido;
   return `Você é O Arquiteto. O pesquisador já tem um protocolo metodológico provisório e quer continuar o diálogo.
 
-Princípio: o método serve à pergunta. Tom: técnico, direto, sem elogios.
+${PRINCIPIO_CURTO}
+
+Tom: técnico, direto, sem elogios.
 
 PROJETO
 - Pergunta: ${s.projeto.pergunta}
@@ -662,7 +730,7 @@ PROJETO
 - Hipótese: ${s.projeto.hipotese || 'não informada'}
 
 DESIGN: ${d.nome} (${d.tag})
-- Abordagem: ${d.abordagem} | Técnica: ${d.tecnica}
+- Família metodológica: ${familiaDe(d)} | Técnica: ${d.tecnica}
 - Fontes: ${d.fontes} | Análise: ${d.analise}
 - Desafio: ${d.desafio}
 
@@ -684,7 +752,12 @@ async function gerarDesigns() {
 - Hipótese: ${state.projeto.hipotese || 'não informada'}
 
 Proponha 3 designs metodológicos distintos e rigorosamente fundamentados.`;
-    const raw = await callIA(promptGeracaoDesigns(), [{ role: 'user', content: userMsg }], 2200);
+    const raw = await callIA(
+      promptGeracaoDesigns(),
+      [{ role: 'user', content: userMsg }],
+      8000,
+      { format: { type: 'json_schema', schema: SCHEMA_DESIGNS } }
+    );
     state.designs = parseDesignsJSON(raw);
     state.designEscolhido = null;
     irParaEtapa(2);
@@ -707,7 +780,7 @@ async function iniciarRefinamento() {
   try {
     const trigger = 'Por favor, inicie o refinamento com a primeira pergunta operacional.';
     state.refinamento.messages = [{ role: 'user', content: trigger }];
-    const resp = await callIA(promptRefinamento(state), state.refinamento.messages, 1200);
+    const resp = await callIA(promptRefinamento(state), state.refinamento.messages, 4000);
     state.refinamento.messages.push({ role: 'assistant', content: resp });
     state.refinamento.rodada = 1;
     renderDialogoRefinamento();
@@ -723,11 +796,21 @@ async function enviarRespostaRefinamento(texto) {
   await salvarSessao();
   setLoading(true, 'O Arquiteto está pensando...');
   try {
-    const resp = await callIA(promptRefinamento(state), state.refinamento.messages, 1500);
+    const resp = await callIA(promptRefinamento(state), state.refinamento.messages, 4000);
     state.refinamento.messages.push({ role: 'assistant', content: resp });
     if (/REFINAMENTO_CONCLU[ÍI]DO/.test(resp)) {
       const partes = resp.split(/REFINAMENTO_CONCLU[ÍI]DO/);
       state.refinamento.sintese = (partes[1] || '').trim();
+      state.refinamento.concluido = true;
+      renderDialogoRefinamento();
+      await salvarSessao();
+      setTimeout(gerarProtocolo, 600);
+      return;
+    }
+    // Trava de segurança: o limite de rodadas só existia como pedido no prompt. Se o
+    // modelo não escrevesse a marca de conclusão, o diálogo seguia sem fim ("Rodada 5 de 3").
+    if (state.refinamento.rodada >= MAX_RODADAS) {
+      state.refinamento.sintese = resp.trim();
       state.refinamento.concluido = true;
       renderDialogoRefinamento();
       await salvarSessao();
@@ -761,7 +844,7 @@ ${dialogo}
 ${state.refinamento.sintese ? 'Síntese final:\n' + state.refinamento.sintese : ''}
 
 Gere o protocolo metodológico provisório.`;
-    const protocolo = await callIA(promptProtocolo(), [{ role: 'user', content: userMsg }], 1000);
+    const protocolo = await callIA(promptProtocolo(), [{ role: 'user', content: userMsg }], 5000);
     state.protocoloFinal = protocolo.trim();
     irParaEtapa(4);
     await salvarSessao();
@@ -777,7 +860,7 @@ async function enviarContinuacao(texto) {
   setLoading(true, 'O Arquiteto está pensando...');
   try {
     const messages = state.continuacao.map(m => ({ role: m.role, content: m.content }));
-    const resp = await callIA(promptContinuacao(state), messages, 1500);
+    const resp = await callIA(promptContinuacao(state), messages, 5000);
     state.continuacao.push({ role: 'assistant', content: resp });
     renderDialogoContinuacao();
     await salvarSessao();
@@ -826,7 +909,7 @@ function exportarPDF() {
       heading('2. Design metodológico escolhido');
       paragraph(`${state.designEscolhido.nome} (${state.designEscolhido.tag})`);
       paragraph(state.designEscolhido.descricao);
-      label('Abordagem', state.designEscolhido.abordagem);
+      label('Família metodológica', familiaDe(state.designEscolhido));
       label('Técnica', state.designEscolhido.tecnica);
       label('Fontes', state.designEscolhido.fontes);
       label('Análise', state.designEscolhido.analise);
@@ -889,7 +972,7 @@ function renderDesigns() {
       <h3 class="design-nome">${escapeHTML(d.nome)}</h3>
       <p class="design-descricao">${escapeHTML(d.descricao)}</p>
       <dl class="design-specs">
-        <dt>Abordagem</dt><dd>${escapeHTML(d.abordagem)}</dd>
+        <dt>Família metodológica</dt><dd>${escapeHTML(familiaDe(d))}</dd>
         <dt>Técnica</dt><dd>${escapeHTML(d.tecnica)}</dd>
         <dt>Fontes</dt><dd>${escapeHTML(d.fontes)}</dd>
         <dt>Análise</dt><dd>${escapeHTML(d.analise)}</dd>
