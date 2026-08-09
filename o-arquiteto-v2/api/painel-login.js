@@ -1,5 +1,13 @@
-// api/painel-login.js — login da professora com senha de 4 dígitos.
-// Bloqueia globalmente por 5 minutos após 5 tentativas falhas.
+// api/painel-login.js — login da professora.
+// A senha é comparada como string, sem limite de formato ou tamanho: use uma
+// frase longa em PROFESSORA_PIN. O painel dá acesso aos dados de toda a turma.
+//
+// O contador de tentativas é único para o painel (chave 'painel_tentativas'),
+// não por usuário nem por IP: 5 erros bloqueiam o painel por 5 minutos, venham
+// de quem vierem. É proposital — contar por IP seria contornável trocando de IP.
+// O efeito colateral é que um estranho tentando adivinhar a senha deixa a
+// professora esperando 5 minutos. O login dos alunos é independente disto e
+// tem contador por CPF (ver login.js).
 
 const h = require('../helpers/index.js');
 

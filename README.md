@@ -64,7 +64,7 @@ Todas em **Settings → Environment Variables**, marcadas para Production, Previ
 |---|---|---|
 | `ANTHROPIC_API_KEY` | sim | Chave da API da Anthropic |
 | `REDIS_URL` | sim | Criada automaticamente pelo Vercel Redis |
-| `PROFESSORA_PIN` | sim | Senha do painel |
+| `PROFESSORA_PIN` | sim | Senha do painel. **Sem limite de tamanho ou formato — use uma frase longa** |
 | `ENCRYPTION_KEY` | sim | 64 caracteres hexadecimais. Criptografa os CPFs no banco |
 | `ANTHROPIC_MODEL` | não | Padrão: `claude-opus-5` |
 | `ANTHROPIC_EFFORT` | não | Padrão: `medium`. Aceita `low`, `medium`, `high` |
@@ -115,7 +115,7 @@ Todos os números abaixo conferidos no código.
 | CPF no banco | Hash SHA-256 (chave de busca) + AES-256-GCM (para descriptografar no painel) |
 | Senha do aluno | PBKDF2 com 100.000 iterações e salt aleatório por aluno |
 | Login do aluno | 5 tentativas erradas bloqueiam **aquele CPF** por 5 minutos |
-| Login do painel | 5 tentativas erradas bloqueiam o painel **globalmente** por 5 minutos — inclusive para você |
+| Login do painel | 5 tentativas erradas bloqueiam o painel por 5 minutos. O contador é **único para o painel**, não por usuário nem por IP — então tentativas de um estranho deixam você esperando. É proposital: contar por IP seria contornável. Não afeta os alunos |
 | Tokens de sessão | 256 bits aleatórios. Expiram em 7 dias (aluno) ou 12 horas (painel) |
 | Dados antigos | Apagados após 6 meses sem acesso, por cron diário às 3h UTC |
 
@@ -133,7 +133,7 @@ Como controladora, você pode ver tudo no painel e excluir sessões específicas
 
 ## Limitações conhecidas
 
-- **Senha de 4 dígitos** são 10.000 combinações. Com o bloqueio por tentativas está adequado para uma turma de doutorado, mas não é segurança bancária.
+- **A senha do aluno tem 4 dígitos** — 10.000 combinações. É uma escolha de conveniência para a turma; com o bloqueio por CPF fica adequado ao contexto, mas não é segurança bancária. A senha do **painel** não tem essa limitação e deve ser uma frase longa, porque é ela que guarda os dados de todo mundo.
 - **O cron do plano Hobby roda 1× por dia.** Se a Vercel mudar o free tier, dá para acionar manualmente acessando `/api/cleanup` no navegador.
 - **O painel é público na URL** — protegido só pelo PIN. Não compartilhe o link com alunos.
 

@@ -61,7 +61,7 @@ header.app-header{border-bottom:1px solid var(--border);padding:1.5rem 0 1.25rem
 .campo label{font-family:'Inter',sans-serif;font-size:.8125rem;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.05em}
 .campo input{padding:.75rem .875rem;border:1px solid var(--border-strong);border-radius:4px;background:var(--bg-card);font-family:'Crimson Pro',Georgia,serif;font-size:1.0625rem;color:var(--text);width:100%}
 .campo input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.campo input.pin{font-family:'Inter',sans-serif;letter-spacing:.5em;text-align:center;font-size:1.5rem;font-weight:600}
+.hint-painel{font-family:'Inter',sans-serif;font-size:.8125rem;line-height:1.5;color:var(--text-muted);margin:.5rem 0 0}
 
 /* Stats */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:2rem}
@@ -167,8 +167,9 @@ header.app-header{border-bottom:1px solid var(--border);padding:1.5rem 0 1.25rem
   <div class="auth-card">
     <form id="formLoginPainel" class="form">
       <div class="campo">
-        <label for="painelPin">Senha (4 dígitos)</label>
-        <input id="painelPin" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" class="pin" required autofocus>
+        <label for="painelPin">Senha do painel</label>
+        <input id="painelPin" type="password" required autofocus autocomplete="current-password">
+        <p class="hint-painel">Pode ser uma frase longa, com letras, espaços e acentos — quanto maior, melhor. Este painel dá acesso aos dados de toda a turma.</p>
       </div>
       <button type="submit" class="btn btn-primary btn-lg btn-block">Entrar</button>
     </form>
@@ -662,10 +663,6 @@ function escapeHTML(s) {
 
 // ========== INIT ==========
 function bindEvents() {
-  document.querySelectorAll('input.pin').forEach(inp => {
-    inp.addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0,4); });
-  });
-
   document.getElementById('formLoginPainel').addEventListener('submit', async e => {
     e.preventDefault();
     const pin = document.getElementById('painelPin').value;
